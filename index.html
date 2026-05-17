@@ -593,6 +593,8 @@ tr:hover td { background: rgba(0,229,255,0.02); }
   height: 100%;
   border-radius: 4px;
   transition: width 0.4s ease;
+  display: block;
+  min-width: 2px;
 }
 .pct-low    { color: var(--red); }
 .pct-mid    { color: var(--yellow); }
@@ -1796,7 +1798,8 @@ function renderDashboard() {
     }
 
     const cls = pctClass(pct);
-    const barW = Math.min(pct, 200); // cap visual at 200%
+    const barColor = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--yellow)' : 'var(--red)';
+    const barW = Math.min(pct, 100);
     const justifKey = `${dateBR}_${area.id}`;
     const justifVal = dashJustif[justifKey] || '';
     const showJustif = pct < 100;
@@ -1810,7 +1813,7 @@ function renderDashboard() {
       <td class="center"><span class="${cls.pct}" style="font-weight:700;font-size:13.5px">${pct}%</span></td>
       <td class="center">
         <span class="bar-track">
-          <span class="bar-fill ${cls.bar}" style="width:${Math.min(pct, 100)}%"></span>
+          <span style="display:block;height:100%;border-radius:4px;width:${barW}%;background:${barColor};transition:width 0.4s ease"></span>
         </span>
       </td>
     </tr>`;
@@ -1945,8 +1948,9 @@ function posClass(i) {
 }
 
 function renderRankCard(item, pos) {
-  const cls = pctClass(item.avgPct);
-  const barW = Math.min(item.avgPct, 100);
+  const barW     = Math.min(item.avgPct, 100);
+  const barColor = item.avgPct >= 100 ? 'var(--green)' : item.avgPct >= 70 ? 'var(--yellow)' : 'var(--red)';
+  const pctColor = item.avgPct >= 100 ? 'var(--green)' : item.avgPct >= 70 ? 'var(--yellow)' : 'var(--red)';
   return `
     <div class="rank-card">
       <span class="rank-pos ${posClass(pos)}">${pos + 1}</span>
@@ -1954,11 +1958,11 @@ function renderRankCard(item, pos) {
         <div class="rank-area-name">${item.icon} ${item.name}</div>
         <div class="rank-area-group" style="color:${item.groupColor}">${item.group}</div>
         <div class="rank-mini-bar">
-          <div class="rank-mini-fill ${cls.bar}" style="width:${barW}%"></div>
+          <div style="height:100%;border-radius:3px;width:${barW}%;background:${barColor}"></div>
         </div>
       </div>
       <div>
-        <div class="rank-pct-big ${cls.pct}">${item.avgPct}%</div>
+        <div class="rank-pct-big" style="color:${pctColor}">${item.avgPct}%</div>
         <div style="font-size:10.5px;color:var(--text-muted);text-align:right;margin-top:2px">${item.daysHit}/${item.daysWithData} dias</div>
       </div>
     </div>`;
