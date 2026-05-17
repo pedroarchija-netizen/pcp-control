@@ -86,6 +86,7 @@ body {
   letter-spacing: -0.5px;
   background: linear-gradient(135deg, var(--cyan), #69f0ae);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -1130,56 +1131,107 @@ tr:hover td { background: rgba(0,229,255,0.02); }
 <!-- canvas oculto para geração -->
 <canvas id="hidden-canvas" style="display:none"></canvas>
 
-<script>
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+const SUPABASE_URL  = 'https://iyajvktctshtiztfannv.supabase.co';
+const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5YWp2a3RjdHNodGl6dGZhbm52Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwMzYyMDgsImV4cCI6MjA5NDYxMjIwOH0.jRy5ZkNB0Z3FRNYOr_sKA62r5M7n7hs9J9ul1Vca2kI';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
 // ================================================================
-//  DATA LAYER — troque por Supabase quando for conectar
+//  DATA LAYER — Supabase
 // ================================================================
 const DB = {
-  // Capacidade
-  getCapacity: () => JSON.parse(localStorage.getItem('pcp_capacity') || '[]'),
-  saveCapacity: (data) => localStorage.setItem('pcp_capacity', JSON.stringify(data)),
-
-  // Produção
-  getProduction: () => JSON.parse(localStorage.getItem('pcp_production') || '[]'),
-  saveProduction: (data) => localStorage.setItem('pcp_production', JSON.stringify(data)),
-
-  // Justificativas
-  getJustif: () => JSON.parse(localStorage.getItem('pcp_justif') || '{}'),
-  saveJustif: (data) => localStorage.setItem('pcp_justif', JSON.stringify(data)),
-
-  // Metas mensais
-  getMetas: () => JSON.parse(localStorage.getItem('pcp_metas') || '{}'),
-  saveMetas: (data) => localStorage.setItem('pcp_metas', JSON.stringify(data)),
-
-  // Configurações de capacidade
-  getConfig: () => JSON.parse(localStorage.getItem('pcp_config') || '{}'),
-  saveConfig: (data) => localStorage.setItem('pcp_config', JSON.stringify(data)),
-};
-
-// ================================================================
-//  SUPABASE PLACEHOLDER — descomente e configure quando for conectar
-// ================================================================
-/*
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-const supabase = createClient('YOUR_SUPABASE_URL', 'YOUR_ANON_KEY');
-
-const DB = {
+  // ---- CAPACITY ----
   getCapacity: async () => {
-    const { data } = await supabase.from('capacity').select('*').order('date', { ascending: false });
-    return data || [];
+    const { data, error } = await supabase
+      .from('capacity')
+      .select('*')
+      .order('date', { ascending: false });
+    if (error) { console.error('getCapacity:', error); return []; }
+    return (data || []).map(r => ({
+      id: r.id, date: r.date, colaboradores: r.colaboradores,
+      inbound: r.inbound, outbound: r.outbound,
+      redCarpet: r.red_carpet, total: r.total,
+      areas: r.areas || {},
+    }));
   },
   saveCapacity: async (records) => {
-    // upsert logic
+    for (const r of records) {
+      await supabase.from('capacity').upsert({
+        id: r.id, date: r.date, colaboradores: r.colaboradores,
+        inbound: r.inbound, outbound: r.outbound,
+        red_carpet: r.redCarpet, total: r.total,
+        areas: r.areas || {},
+      }, { onConflict: 'id' });
+    }
   },
+  deleteCapacity: async (id) => {
+    await supabase.from('capacity').delete().eq('id', id);
+  },
+
+  // ---- PRODUCTION ----
   getProduction: async () => {
-    const { data } = await supabase.from('production').select('*').order('date', { ascending: false });
-    return data || [];
+    const { data, error } = await supabase
+      .from('production')
+      .select('*')
+      .order('date', { ascending: false });
+    if (error) { console.error('getProduction:', error); return []; }
+    return (data || []).map(r => ({ id: r.id, date: r.date, areas: r.areas || {} }));
   },
   saveProduction: async (records) => {
-    // upsert logic
+    for (const r of records) {
+      await supabase.from('production').upsert(
+        { id: r.id, date: r.date, areas: r.areas || {} },
+        { onConflict: 'id' }
+      );
+    }
+  },
+
+  // ---- JUSTIFICATIVAS ----
+  getJustif: async () => {
+    const { data, error } = await supabase.from('justificativas').select('*');
+    if (error) { console.error('getJustif:', error); return {}; }
+    const obj = {};
+    (data || []).forEach(r => { obj[r.key] = r.value; });
+    return obj;
+  },
+  saveJustif: async (obj) => {
+    const rows = Object.entries(obj).map(([key, value]) => ({ key, value }));
+    if (rows.length) await supabase.from('justificativas').upsert(rows, { onConflict: 'key' });
+  },
+
+  // ---- METAS ----
+  getMetas: async () => {
+    const { data, error } = await supabase.from('metas').select('*');
+    if (error) { console.error('getMetas:', error); return {}; }
+    const obj = {};
+    (data || []).forEach(r => { obj[r.key] = r.data; });
+    return obj;
+  },
+  saveMetas: async (obj) => {
+    const rows = Object.entries(obj).map(([key, data]) => ({ key, data }));
+    if (rows.length) await supabase.from('metas').upsert(rows, { onConflict: 'key' });
+  },
+
+  // ---- CONFIG ----
+  getConfig: async () => {
+    const { data, error } = await supabase
+      .from('configuracoes').select('*').eq('key', 'areas_pdia').single();
+    if (error || !data) return {};
+    return data.value || {};
+  },
+  saveConfig: async (obj) => {
+    await supabase.from('configuracoes').upsert(
+      { key: 'areas_pdia', value: obj },
+      { onConflict: 'key' }
+    );
   },
 };
-*/
+
+// ================================================================
+//  SUPABASE — configuração
+// ================================================================
 
 // ================================================================
 //  CONSTANTS
@@ -1250,26 +1302,6 @@ let editingId = null;
 // ================================================================
 //  SEED DATA
 // ================================================================
-function seedData() {
-  if (DB.getCapacity().length === 0) {
-    const seed = [
-      { id: 1, date: '15/05/2026', colaboradores: 40, inbound: 10642, outbound: 7185, redCarpet: 291, total: 18118, areas: {} },
-      { id: 2, date: '14/05/2026', colaboradores: 49, inbound: 13195, outbound: 7799, redCarpet: 291, total: 21285, areas: {} },
-      { id: 3, date: '13/05/2026', colaboradores: 45, inbound: 10918, outbound: 7850, redCarpet: 291, total: 19059, areas: {} },
-      { id: 4, date: '11/05/2026', colaboradores: 33, inbound: 11084, outbound: 6021, redCarpet: 375, total: 17480, areas: {} },
-      { id: 5, date: '08/05/2026', colaboradores: 23, inbound: 8927, outbound: 0, redCarpet: 0, total: 8927, areas: {} },
-    ];
-    DB.saveCapacity(seed);
-  }
-  if (DB.getProduction().length === 0) {
-    const seed = [{
-      id: 1, date: '15/05/2026',
-      areas: { p_check_in:715, p_armazenagem:1489, p_picking:1389, p_conferencia:1787, p_expedicao:1787, p_cadastro_red:99, p_fotografia_red:52, p_criacao_lotes:113, p_triagem:853, p_cadastro:937, p_passadoria:1049, p_fotografia:592, p_dobra:429 }
-    }];
-    DB.saveProduction(seed);
-  }
-}
-
 // ================================================================
 //  NAVIGATION
 // ================================================================
@@ -1371,10 +1403,10 @@ function clearFilter() {
   renderCapacidade();
 }
 
-function deleteRecord(id) {
+async function deleteRecord(id) {
   if (!confirm('Excluir este registro?')) return;
+  await DB.deleteCapacity(id);
   capacityRecords = capacityRecords.filter(r => r.id !== id);
-  DB.saveCapacity(capacityRecords);
   renderCapacidade();
 }
 
@@ -1530,12 +1562,11 @@ function recalcModal() {
   document.getElementById('modal-total-geral').textContent = fmt(totalInbound + totalOutbound + totalRed);
 }
 
-function saveCapacidade() {
+async function saveCapacidade() {
   const dateISO = document.getElementById('modal-date').value;
   if (!dateISO) { alert('Selecione uma data'); return; }
   const dateBR = isoToBR(dateISO);
 
-  // collect areas
   const areas = {};
   ALL_CAP_AREAS.forEach(a => {
     const fixos = Number(document.querySelector(`input[data-area="${a.id}"][data-field="fixos"]`)?.value) || 0;
@@ -1570,7 +1601,7 @@ function saveCapacidade() {
     capacityRecords.unshift(record);
   }
 
-  DB.saveCapacity(capacityRecords);
+  await DB.saveCapacity([record]);
   closeModal();
   renderCapacidade();
 }
@@ -1624,7 +1655,7 @@ function setProdDateToday() {
   document.getElementById('prod-date').onchange();
 }
 
-function saveProducao() {
+async function saveProducao() {
   const dateISO = document.getElementById('prod-date').value;
   if (!dateISO) { alert('Selecione uma data'); return; }
   const dateBR = isoToBR(dateISO);
@@ -1643,9 +1674,8 @@ function saveProducao() {
     productionRecords.unshift(record);
   }
 
-  DB.saveProduction(productionRecords);
+  await DB.saveProduction([record]);
 
-  // show saved indicators
   PRODUCAO_AREAS.forEach(a => {
     const tag = document.querySelector(`[data-saved="${a.id}"]`);
     if (tag) tag.style.visibility = 'visible';
@@ -1818,11 +1848,11 @@ function setDashToday() {
   renderDashboard();
 }
 
-function saveJustif(dateBR, areaId) {
+async function saveJustif(dateBR, areaId) {
   const key = `${dateBR}_${areaId}`;
   const val = document.getElementById(`justif-${areaId}`)?.value || '';
   dashJustif[key] = val;
-  DB.saveJustif(dashJustif);
+  await DB.saveJustif({ [key]: val });
   renderDashboard();
 }
 
@@ -2187,7 +2217,7 @@ function renderMetas() {
   document.getElementById('meta-dias-uteis').oninput = renderMetasTable;
 }
 
-function saveMetas() {
+async function saveMetas() {
   const key  = getMetaKey();
   const dias = parseInt(document.getElementById('meta-dias-uteis')?.value) || 20;
   const areas = {};
@@ -2202,7 +2232,7 @@ function saveMetas() {
   });
 
   metasData[key] = { diasUteis: dias, areas };
-  DB.saveMetas(metasData);
+  await DB.saveMetas({ [key]: metasData[key] });
 
   const btn = event.target;
   const orig = btn.innerHTML;
@@ -2606,15 +2636,14 @@ function updateConfigPreview(areaId) {
   if (cEl) cEl.textContent = cap10.toLocaleString('pt-BR');
 }
 
-function saveConfig() {
+async function saveConfig() {
   const allAreas = [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS];
   allAreas.forEach(a => {
     const val = parseInt(document.getElementById(`cfg-${a.id}`)?.value);
     if (val > 0) configData[a.id] = val;
   });
-  DB.saveConfig(configData);
+  await DB.saveConfig(configData);
 
-  // feedback
   const btn = event.target;
   const orig = btn.innerHTML;
   btn.innerHTML = '✓ Salvo!';
@@ -2623,22 +2652,52 @@ function saveConfig() {
   setTimeout(() => { btn.innerHTML = orig; btn.style.borderColor = ''; btn.style.color = ''; }, 1800);
 }
 
-function resetConfig() {
+async function resetConfig() {
   if (!confirm('Restaurar todos os valores padrão? Os valores customizados serão perdidos.')) return;
   configData = {};
-  DB.saveConfig({});
+  await DB.saveConfig({});
   renderConfig();
 }
 
 // ================================================================
-//  INIT
+//  INIT — assíncrono com Supabase
 // ================================================================
-productionRecords = DB.getProduction();
-dashJustif       = DB.getJustif();
-metasData        = DB.getMetas();
-configData       = DB.getConfig();
-renderCapacidade();
-renderProducao();
+async function init() {
+  // overlay de loading
+  const overlay = document.createElement('div');
+  overlay.id = 'loading-overlay';
+  overlay.style.cssText = `position:fixed;inset:0;background:var(--bg-deepest);display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:9999`;
+  overlay.innerHTML = `
+    <div style="font-size:40px">⚙️</div>
+    <div style="color:var(--cyan);font-size:16px;font-weight:600">Conectando ao banco de dados...</div>
+    <div style="color:var(--text-muted);font-size:13px">Aguarde um momento</div>`;
+  document.body.appendChild(overlay);
+
+  try {
+    [capacityRecords, productionRecords, dashJustif, metasData, configData] = await Promise.all([
+      DB.getCapacity(),
+      DB.getProduction(),
+      DB.getJustif(),
+      DB.getMetas(),
+      DB.getConfig(),
+    ]);
+    overlay.remove();
+    renderCapacidade();
+    renderProducao();
+  } catch(e) {
+    overlay.innerHTML = `
+      <div style="font-size:40px">❌</div>
+      <div style="color:var(--red);font-size:16px;font-weight:600">Erro ao conectar ao Supabase</div>
+      <div style="color:var(--text-muted);font-size:13px;max-width:400px;text-align:center">${e.message}</div>
+      <button onclick="location.reload()" style="margin-top:8px;padding:10px 24px;background:transparent;
+        border:1px solid var(--cyan);color:var(--cyan);border-radius:8px;cursor:pointer;font-size:13px">
+        Tentar novamente
+      </button>`;
+  }
+}
+
+init();
 </script>
 </body>
 </html>
