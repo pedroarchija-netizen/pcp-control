@@ -1,0 +1,2644 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PCP Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ========== CSS RESET & VARIABLES ========== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg-deepest: #060d1b;
+  --bg-deep: #0b1223;
+  --bg-card: #101b2e;
+  --bg-input: #15213a;
+  --bg-hover: #182744;
+  --border: #1c2d4a;
+  --border-light: #243656;
+  --text-primary: #e8edf5;
+  --text-secondary: #8899b4;
+  --text-muted: #566a88;
+  --cyan: #00e5ff;
+  --cyan-dim: rgba(0,229,255,0.12);
+  --green: #00e676;
+  --green-dim: rgba(0,230,118,0.12);
+  --purple: #b388ff;
+  --purple-dim: rgba(179,136,255,0.12);
+  --yellow: #ffd740;
+  --yellow-dim: rgba(255,215,64,0.12);
+  --red: #ff5252;
+  --red-dim: rgba(255,82,82,0.12);
+  --orange: #ffab40;
+  --font-display: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius: 10px;
+  --radius-lg: 14px;
+}
+
+html { font-size: 14px; }
+body {
+  font-family: var(--font-display);
+  background: var(--bg-deepest);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+
+/* ========== SIDEBAR ========== */
+.sidebar {
+  width: 230px;
+  background: var(--bg-deep);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+}
+.logo {
+  padding: 22px 22px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo-icon {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, var(--cyan), #0091ea);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  box-shadow: 0 0 20px rgba(0,229,255,0.2);
+}
+.logo-text {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, var(--cyan), #69f0ae);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.nav { padding: 14px 0; flex: 1; }
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 22px;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.nav-btn:hover { background: rgba(0,229,255,0.04); color: var(--text-primary); }
+.nav-btn.active {
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  border-left-color: var(--cyan);
+  font-weight: 600;
+}
+.nav-btn .icon { font-size: 17px; width: 24px; text-align: center; }
+
+.sidebar-footer {
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ========== MAIN ========== */
+.main {
+  flex: 1;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 32px 36px;
+}
+
+/* ========== PAGE HEADER ========== */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 26px;
+}
+.page-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+}
+.page-subtitle {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+/* ========== BUTTONS ========== */
+.btn {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: transparent;
+  border: 1.5px solid var(--cyan);
+  color: var(--cyan);
+  padding: 10px 20px;
+}
+.btn-primary:hover {
+  background: var(--cyan-dim);
+  box-shadow: 0 0 16px rgba(0,229,255,0.15);
+}
+.btn-ghost {
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  padding: 8px 16px;
+}
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn-ghost.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: var(--cyan-dim);
+}
+.btn-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+.btn-icon.edit { background: var(--purple-dim); color: var(--purple); }
+.btn-icon.edit:hover { background: rgba(179,136,255,0.25); }
+.btn-icon.delete { background: var(--red-dim); color: var(--red); }
+.btn-icon.delete:hover { background: rgba(255,82,82,0.25); }
+.btn-save-day {
+  background: transparent;
+  border: 1.5px solid var(--cyan);
+  color: var(--cyan);
+  padding: 12px 28px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s;
+  margin-top: 28px;
+}
+.btn-save-day:hover { background: var(--cyan-dim); box-shadow: 0 0 20px rgba(0,229,255,0.15); }
+
+/* ========== FILTER BAR ========== */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+.filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.filter-arrow { color: var(--text-muted); font-size: 14px; }
+input[type="date"], .input-date {
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input[type="date"]:focus, .input-date:focus {
+  border-color: var(--cyan);
+}
+.filter-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.filter-clear:hover { color: var(--text-secondary); }
+
+/* ========== KPI ROW ========== */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 22px;
+  position: relative;
+  overflow: hidden;
+}
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 2px;
+  background: var(--kpi-color);
+  opacity: 0.6;
+}
+.kpi-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--kpi-color);
+  letter-spacing: -1px;
+}
+
+/* ========== TABLE CARD ========== */
+.table-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.table-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.table-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+table { width: 100%; border-collapse: collapse; }
+th {
+  padding: 12px 20px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+th.center, td.center { text-align: center; }
+td {
+  padding: 14px 20px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(28,45,74,0.4);
+}
+tr:hover td { background: rgba(0,229,255,0.02); }
+.td-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.badge-hoje {
+  display: inline-block;
+  background: var(--cyan);
+  color: var(--bg-deepest);
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 9px;
+  border-radius: 10px;
+  margin-left: 8px;
+  vertical-align: middle;
+  letter-spacing: 0.3px;
+}
+.color-cyan { color: var(--cyan) !important; }
+.color-purple { color: var(--purple) !important; }
+.color-yellow { color: var(--yellow) !important; }
+.color-green { color: var(--green) !important; font-weight: 700; }
+.empty-row td { text-align: center; color: var(--text-muted); padding: 40px 20px; }
+
+/* ========== MODAL ========== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4,8,20,0.82);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 95%;
+  max-width: 1100px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+  animation: slideUp 0.25s;
+}
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title { font-size: 19px; font-weight: 700; }
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+.modal-body {
+  padding: 24px 28px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* modal tables */
+.section-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  margin-top: 8px;
+}
+.modal table th { padding: 10px 10px; font-size: 9.5px; text-align: center; }
+.modal table td { padding: 10px 10px; text-align: center; font-size: 13px; }
+.modal table td:first-child { text-align: left; }
+.modal input[type="number"] {
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  width: 62px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.modal input[type="number"]:focus { border-color: var(--cyan); }
+.subtotal-row td {
+  font-weight: 700 !important;
+  border-top: 2px solid var(--border-light) !important;
+}
+
+.totals-bar {
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 20px 24px;
+  background: var(--bg-deepest);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+.total-item { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.total-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+.total-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 800;
+}
+.total-value.big { font-size: 28px; }
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.btn-cancel {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  padding: 10px 24px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.btn-cancel:hover { background: var(--bg-hover); }
+
+/* ========== PRODUCAO MANUAL ========== */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+}
+.card-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 22px;
+  color: var(--text-primary);
+}
+.date-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.prod-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+}
+.prod-item { display: flex; flex-direction: column; gap: 6px; }
+.prod-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.prod-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  padding: 14px 12px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.prod-input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,229,255,0.08); }
+.saved-tag {
+  font-size: 11px;
+  color: var(--cyan);
+  font-weight: 500;
+  text-align: center;
+}
+
+/* ========== DASHBOARD ========== */
+.dash-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+.dash-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.dash-table-wrap {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.dash-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.bar-track {
+  width: 200px;
+  height: 8px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 4px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.pct-low    { color: var(--red); }
+.pct-mid    { color: var(--yellow); }
+.pct-good   { color: var(--green); }
+.bar-low    { background: var(--red); }
+.bar-mid    { background: var(--yellow); }
+.bar-good   { background: var(--green); }
+
+.justif-row { background: rgba(255,82,82,0.04) !important; }
+.justif-cell { padding: 0 20px 14px !important; }
+.justif-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-deepest);
+  border: 1px solid rgba(255,82,82,0.25);
+  border-radius: 8px;
+}
+.justif-icon { font-size: 14px; margin-top: 2px; flex-shrink: 0; }
+.justif-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--red);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.justif-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  line-height: 1.5;
+  min-height: 38px;
+}
+.justif-input::placeholder { color: var(--text-muted); }
+.justif-saved {
+  font-size: 11px;
+  color: var(--cyan);
+  font-weight: 500;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.btn-justif-save {
+  background: transparent;
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  margin-top: 2px;
+}
+.btn-justif-save:hover { background: var(--red-dim); }
+.dash-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 48px 20px;
+  font-size: 14px;
+}
+
+/* ========== RANKING ========== */
+.rank-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 20px;
+  border-bottom: 1px solid rgba(28,45,74,0.4);
+  transition: background 0.1s;
+}
+.rank-card:hover { background: rgba(0,229,255,0.02); }
+.rank-pos {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 800;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.rank-pos.gold   { color: #ffd740; }
+.rank-pos.silver { color: #b0bec5; }
+.rank-pos.bronze { color: #ff8a65; }
+.rank-pos.other  { color: var(--text-muted); }
+.rank-area-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex: 1;
+}
+.rank-area-group {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.rank-pct-big {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 800;
+  text-align: right;
+  min-width: 60px;
+}
+.rank-mini-bar {
+  width: 100%;
+  height: 5px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 5px;
+}
+.rank-mini-fill { height: 100%; border-radius: 3px; }
+.consistency-bar {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+}
+.day-dot {
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ========== HIDDEN PAGES ========== */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 900px) {
+  .sidebar { width: 60px; }
+  .logo-text, .nav-btn span:not(.icon), .sidebar-footer { display: none; }
+  .logo { padding: 16px; justify-content: center; }
+  .nav-btn { justify-content: center; padding: 14px; }
+  .main { padding: 20px; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .prod-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 600px) {
+  .kpi-row { grid-template-columns: 1fr; }
+  .prod-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- ========== SIDEBAR ========== -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">⚙️</div>
+    <span class="logo-text">PCP Control</span>
+  </div>
+  <nav class="nav">
+    <button class="nav-btn active" data-page="capacidade">
+      <span class="icon">📊</span>
+      <span>Capacidade Diária</span>
+    </button>
+    <button class="nav-btn" data-page="producao">
+      <span class="icon">✏️</span>
+      <span>Produção Manual</span>
+    </button>
+    <button class="nav-btn" data-page="dashboard">
+      <span class="icon">📈</span>
+      <span>Dashboard</span>
+    </button>
+    <button class="nav-btn" data-page="ranking">
+      <span class="icon">🏆</span>
+      <span>Ranking de Áreas</span>
+    </button>
+    <button class="nav-btn" data-page="metas">
+      <span class="icon">🎯</span>
+      <span>Metas Mensais</span>
+    </button>
+    <button class="nav-btn" data-page="config">
+      <span class="icon">⚙️</span>
+      <span>Configurações</span>
+    </button>
+  </nav>
+  <div class="sidebar-footer">PCP Control v1.0<br>Supabase Ready</div>
+</aside>
+
+<!-- ========== MAIN CONTENT ========== -->
+<main class="main">
+
+  <!-- ===== PAGE: CAPACIDADE DIÁRIA ===== -->
+  <div id="page-capacidade" class="page active">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">📋 Capacidade Diária</h1>
+        <p class="page-subtitle">Registro e acompanhamento da capacidade produtiva por área</p>
+      </div>
+      <button class="btn btn-primary" onclick="openModal()">+ Registrar dia</button>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="filter-bar">
+      <span class="filter-label">Período:</span>
+      <input type="date" id="filter-from">
+      <span class="filter-arrow">→</span>
+      <input type="date" id="filter-to">
+      <button class="btn btn-ghost filter-btn" data-filter="hoje">Hoje</button>
+      <button class="btn btn-ghost filter-btn" data-filter="7d">7d</button>
+      <button class="btn btn-ghost filter-btn" data-filter="30d">30d</button>
+      <button class="filter-clear" onclick="clearFilter()">✕</button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-row">
+      <div class="kpi-card" style="--kpi-color: var(--purple)">
+        <div class="kpi-label">Dias Registrados</div>
+        <div class="kpi-value" id="kpi-dias">0</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color: var(--cyan)">
+        <div class="kpi-label">Cap. Hoje</div>
+        <div class="kpi-value" id="kpi-hoje">0</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color: var(--text-primary)">
+        <div class="kpi-label">Média Diária</div>
+        <div class="kpi-value" id="kpi-media">0</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color: var(--green)">
+        <div class="kpi-label">Máximo Registrado</div>
+        <div class="kpi-value" id="kpi-max">0</div>
+      </div>
+    </div>
+
+    <!-- TABELA -->
+    <div class="table-card">
+      <div class="table-card-header">
+        <span class="table-card-title">Histórico de registros</span>
+        <button class="btn btn-ghost" onclick="exportCSV()">⬇ CSV</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th class="center">Colaboradores</th>
+            <th class="center">Inbound</th>
+            <th class="center">Outbound</th>
+            <th class="center">Red Carpet</th>
+            <th class="center">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="capacity-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: PRODUÇÃO MANUAL ===== -->
+  <div id="page-producao" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">✏️ Produção Manual</h1>
+        <p class="page-subtitle">Lançamento diário das áreas fora do app</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Lançar produção do dia</div>
+      <div class="date-row">
+        <span class="filter-label">Data <span style="color:var(--red)">*</span></span>
+        <input type="date" id="prod-date">
+        <button class="btn btn-ghost" onclick="setProdDateToday()">Hoje</button>
+      </div>
+      <div class="prod-grid" id="prod-grid"></div>
+      <button class="btn-save-day" onclick="saveProducao()">💾 Salvar dia</button>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: DASHBOARD ===== -->
+  <div id="page-dashboard" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">📈 Dashboard</h1>
+        <p class="page-subtitle">Comparativo de capacidade × produção realizada por área</p>
+      </div>
+      <button class="btn btn-primary" onclick="gerarImagem()">📸 Gerar imagem</button>
+    </div>
+
+    <!-- FILTRO DE DATA -->
+    <div class="dash-filter-bar">
+      <span class="filter-label">Data:</span>
+      <input type="date" id="dash-date">
+      <button class="btn btn-ghost" onclick="setDashToday()">Hoje</button>
+      <span id="dash-date-label" style="color:var(--text-muted);font-size:13px;margin-left:8px;"></span>
+    </div>
+
+    <!-- KPIs -->
+    <div class="dash-kpi-row">
+      <div class="kpi-card" style="--kpi-color:var(--cyan)">
+        <div class="kpi-label">Cap. Total</div>
+        <div class="kpi-value" id="dash-kpi-cap">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--purple)">
+        <div class="kpi-label">Produção Real</div>
+        <div class="kpi-value" id="dash-kpi-prod">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--green)">
+        <div class="kpi-label">% Geral Atingido</div>
+        <div class="kpi-value" id="dash-kpi-pct">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--green)">
+        <div class="kpi-label">Áreas no Meta</div>
+        <div class="kpi-value" id="dash-kpi-ok">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--red)">
+        <div class="kpi-label">Áreas Abaixo</div>
+        <div class="kpi-value" id="dash-kpi-nok">—</div>
+      </div>
+    </div>
+
+    <!-- TABELA COMPARATIVA -->
+    <div class="dash-table-wrap">
+      <div class="table-card-header">
+        <span class="table-card-title">Capacidade × Produção por Área</span>
+        <button class="btn btn-ghost" onclick="exportDashCSV()">⬇ CSV</button>
+      </div>
+      <div id="dash-table-body"></div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: RANKING ===== -->
+  <div id="page-ranking" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">🏆 Ranking de Áreas</h1>
+        <p class="page-subtitle">Desempenho acumulado por área no período selecionado</p>
+      </div>
+      <button class="btn btn-ghost" onclick="exportRankingCSV()">⬇ CSV</button>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="filter-bar">
+      <span class="filter-label">Período:</span>
+      <button class="btn btn-ghost filter-btn-rank active" data-rank="7d">7 dias</button>
+      <button class="btn btn-ghost filter-btn-rank" data-rank="15d">15 dias</button>
+      <button class="btn btn-ghost filter-btn-rank" data-rank="30d">30 dias</button>
+      <button class="btn btn-ghost filter-btn-rank" data-rank="custom">Personalizado</button>
+      <span id="rank-custom-dates" style="display:none;align-items:center;gap:8px">
+        <input type="date" id="rank-from">
+        <span style="color:var(--text-muted)">→</span>
+        <input type="date" id="rank-to">
+      </span>
+    </div>
+
+    <!-- KPIs resumo -->
+    <div class="kpi-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px">
+      <div class="kpi-card" style="--kpi-color:var(--cyan)">
+        <div class="kpi-label">Dias Analisados</div>
+        <div class="kpi-value" id="rank-kpi-dias">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--green)">
+        <div class="kpi-label">Melhor Área</div>
+        <div class="kpi-value" style="font-size:16px;line-height:1.3" id="rank-kpi-best">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--red)">
+        <div class="kpi-label">Área com mais Gaps</div>
+        <div class="kpi-value" style="font-size:16px;line-height:1.3" id="rank-kpi-worst">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--yellow)">
+        <div class="kpi-label">Média Geral do Período</div>
+        <div class="kpi-value" id="rank-kpi-avg">—</div>
+      </div>
+    </div>
+
+    <!-- DUAS COLUNAS: melhores e piores -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
+      <div class="table-card">
+        <div class="table-card-header">
+          <span class="table-card-title">🥇 Melhores Desempenhos</span>
+        </div>
+        <div id="rank-top-body"></div>
+      </div>
+      <div class="table-card">
+        <div class="table-card-header">
+          <span class="table-card-title">🔻 Mais Abaixo da Meta</span>
+        </div>
+        <div id="rank-bot-body"></div>
+      </div>
+    </div>
+
+    <!-- TABELA COMPLETA -->
+    <div class="table-card">
+      <div class="table-card-header">
+        <span class="table-card-title">Todas as Áreas — Ranking Completo</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>Área</th>
+            <th class="center">Dias c/ dados</th>
+            <th class="center">Dias na meta</th>
+            <th class="center">Taxa de meta</th>
+            <th class="center">% Médio</th>
+            <th class="center" style="width:180px">Consistência</th>
+          </tr>
+        </thead>
+        <tbody id="rank-full-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: METAS MENSAIS ===== -->
+  <div id="page-metas" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">🎯 Metas Mensais</h1>
+        <p class="page-subtitle">Planejamento de headcount por área com base na meta de peças</p>
+      </div>
+      <button class="btn btn-ghost" onclick="exportMetasCSV()">⬇ CSV</button>
+    </div>
+
+    <!-- SELETOR MÊS/ANO + DIAS ÚTEIS -->
+    <div class="filter-bar" style="gap:16px">
+      <span class="filter-label">Mês/Ano:</span>
+      <select id="meta-mes" style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);padding:8px 12px;border-radius:8px;font-family:var(--font-display);font-size:13px;outline:none">
+        <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+        <option value="3">Março</option><option value="4">Abril</option>
+        <option value="5" selected>Maio</option><option value="6">Junho</option>
+        <option value="7">Julho</option><option value="8">Agosto</option>
+        <option value="9">Setembro</option><option value="10">Outubro</option>
+        <option value="11">Novembro</option><option value="12">Dezembro</option>
+      </select>
+      <select id="meta-ano" style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);padding:8px 12px;border-radius:8px;font-family:var(--font-display);font-size:13px;outline:none">
+        <option value="2025">2025</option><option value="2026" selected>2026</option><option value="2027">2027</option>
+      </select>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:12px;padding-left:12px;border-left:1px solid var(--border)">
+        <span class="filter-label">Dias úteis:</span>
+        <input type="number" id="meta-dias-uteis" min="1" max="31" value="20"
+          style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--cyan);padding:8px 12px;border-radius:8px;font-family:var(--font-mono);font-size:15px;font-weight:700;width:70px;text-align:center;outline:none">
+      </div>
+      <button class="btn btn-primary" style="margin-left:8px" onclick="saveMetas()">💾 Salvar mês</button>
+    </div>
+
+    <!-- KPIs DO MÊS -->
+    <div class="kpi-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px">
+      <div class="kpi-card" style="--kpi-color:var(--cyan)">
+        <div class="kpi-label">Meta Total do Mês</div>
+        <div class="kpi-value" id="meta-kpi-total">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--purple)">
+        <div class="kpi-label">HC Total Planejado</div>
+        <div class="kpi-value" id="meta-kpi-hc">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--yellow)">
+        <div class="kpi-label">Meta/Dia (média)</div>
+        <div class="kpi-value" id="meta-kpi-dia">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--green)">
+        <div class="kpi-label">Dias Úteis</div>
+        <div class="kpi-value" id="meta-kpi-uteis">—</div>
+      </div>
+    </div>
+
+    <!-- TABELA POR ÁREA -->
+    <div class="table-card">
+      <div class="table-card-header">
+        <span class="table-card-title">Planejamento por Área</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Área</th>
+            <th class="center">Meta Mensal (peças)</th>
+            <th class="center">HC Planejado</th>
+            <th class="center">Meta/Dia</th>
+          </tr>
+        </thead>
+        <tbody id="metas-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: CONFIGURAÇÕES ===== -->
+  <div id="page-config" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">⚙️ Configurações</h1>
+        <p class="page-subtitle">Capacidade padrão de peças por dia de cada área</p>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" onclick="resetConfig()">↺ Restaurar padrões</button>
+        <button class="btn btn-primary" onclick="saveConfig()">💾 Salvar</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:18px" id="config-body"></div>
+  </div>
+
+</main>
+
+<!-- ========== MODAL: REGISTRAR CAPACIDADE ========== -->
+<div class="modal-overlay" id="modal-overlay" style="display:none" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">📋 Registrar Capacidade do Dia</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- MODAL PREVIEW IMAGEM -->
+<div class="modal-overlay" id="img-modal-overlay" style="display:none" onclick="closeImgModal()">
+  <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:16px;
+    width:95%;max-width:520px;max-height:92vh;display:flex;flex-direction:column;
+    box-shadow:0 24px 80px rgba(0,0,0,0.6)" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid var(--border)">
+      <span style="font-size:17px;font-weight:700">📸 Preview — Imagem do Dia</span>
+      <button class="modal-close" onclick="closeImgModal()">✕</button>
+    </div>
+    <div style="padding:20px;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:16px">
+      <canvas id="share-canvas" style="width:100%;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4)"></canvas>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:13px" onclick="baixarImagem()">
+        ⬇ Baixar imagem
+      </button>
+      <p style="font-size:12px;color:var(--text-muted);text-align:center">
+        Baixe e compartilhe direto no grupo do trabalho
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- canvas oculto para geração -->
+<canvas id="hidden-canvas" style="display:none"></canvas>
+
+<script>
+// ================================================================
+//  DATA LAYER — troque por Supabase quando for conectar
+// ================================================================
+const DB = {
+  // Capacidade
+  getCapacity: () => JSON.parse(localStorage.getItem('pcp_capacity') || '[]'),
+  saveCapacity: (data) => localStorage.setItem('pcp_capacity', JSON.stringify(data)),
+
+  // Produção
+  getProduction: () => JSON.parse(localStorage.getItem('pcp_production') || '[]'),
+  saveProduction: (data) => localStorage.setItem('pcp_production', JSON.stringify(data)),
+
+  // Justificativas
+  getJustif: () => JSON.parse(localStorage.getItem('pcp_justif') || '{}'),
+  saveJustif: (data) => localStorage.setItem('pcp_justif', JSON.stringify(data)),
+
+  // Metas mensais
+  getMetas: () => JSON.parse(localStorage.getItem('pcp_metas') || '{}'),
+  saveMetas: (data) => localStorage.setItem('pcp_metas', JSON.stringify(data)),
+
+  // Configurações de capacidade
+  getConfig: () => JSON.parse(localStorage.getItem('pcp_config') || '{}'),
+  saveConfig: (data) => localStorage.setItem('pcp_config', JSON.stringify(data)),
+};
+
+// ================================================================
+//  SUPABASE PLACEHOLDER — descomente e configure quando for conectar
+// ================================================================
+/*
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+const supabase = createClient('YOUR_SUPABASE_URL', 'YOUR_ANON_KEY');
+
+const DB = {
+  getCapacity: async () => {
+    const { data } = await supabase.from('capacity').select('*').order('date', { ascending: false });
+    return data || [];
+  },
+  saveCapacity: async (records) => {
+    // upsert logic
+  },
+  getProduction: async () => {
+    const { data } = await supabase.from('production').select('*').order('date', { ascending: false });
+    return data || [];
+  },
+  saveProduction: async (records) => {
+    // upsert logic
+  },
+};
+*/
+
+// ================================================================
+//  CONSTANTS
+// ================================================================
+const INBOUND_AREAS = [
+  { id: 'criacao_lotes', name: 'Criação de Lotes', icon: '🎨', pdia: 167 },
+  { id: 'triagem', name: 'Triagem', icon: '🔍', pdia: 330 },
+  { id: 'cadastro', name: 'Cadastro', icon: '📋', pdia: 189 },
+  { id: 'passadoria', name: 'Passadoria', icon: '👕', pdia: 407 },
+  { id: 'fotografia', name: 'Fotografia', icon: '📸', pdia: 291 },
+  { id: 'dobra', name: 'Dobra', icon: '📦', pdia: 582 },
+  { id: 'check_in', name: 'Check In', icon: '☑️', pdia: 2910 },
+  { id: 'armazenagem', name: 'Armazenagem', icon: '🏷️', pdia: 1261 },
+];
+const OUTBOUND_AREAS = [
+  { id: 'picking', name: 'Picking', icon: '🎾', pdia: 485 },
+  { id: 'conferencia', name: 'Conferência', icon: '📑', pdia: 350 },
+  { id: 'expedicao', name: 'Expedição', icon: '🚚', pdia: 400 },
+];
+const RED_CARPET_AREAS = [
+  { id: 'cadastro_red',   name: 'Cadastro Red',   icon: '📋', pdia: 189 },
+  { id: 'fotografia_red', name: 'Fotografia Red',  icon: '📸', pdia: 291 },
+  { id: 'expedicao_red',  name: 'Expedição Red',   icon: '🚚', pdia: 400 },
+];
+const ALL_CAP_AREAS = [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS];
+
+// Mesma sequência da Capacidade: Inbound → Outbound → Red Carpet
+const PRODUCAO_AREAS = [
+  // INBOUND
+  { id: 'p_criacao_lotes', name: 'CRIAÇÃO DE LOTES', icon: '🎨', group: 'INBOUND' },
+  { id: 'p_triagem', name: 'TRIAGEM', icon: '🔍', group: 'INBOUND' },
+  { id: 'p_cadastro', name: 'CADASTRO', icon: '📋', group: 'INBOUND' },
+  { id: 'p_passadoria', name: 'PASSADORIA', icon: '👕', group: 'INBOUND' },
+  { id: 'p_fotografia', name: 'FOTOGRAFIA', icon: '📸', group: 'INBOUND' },
+  { id: 'p_dobra', name: 'DOBRA', icon: '📦', group: 'INBOUND' },
+  { id: 'p_check_in', name: 'CHECK IN', icon: '☑️', group: 'INBOUND' },
+  { id: 'p_armazenagem', name: 'ARMAZENAGEM', icon: '🏷️', group: 'INBOUND' },
+  // OUTBOUND
+  { id: 'p_picking', name: 'PICKING', icon: '🎾', group: 'OUTBOUND' },
+  { id: 'p_conferencia', name: 'CONFERÊNCIA', icon: '📑', group: 'OUTBOUND' },
+  { id: 'p_expedicao', name: 'EXPEDIÇÃO', icon: '🚚', group: 'OUTBOUND' },
+  // RED CARPET
+  { id: 'p_cadastro_red',   name: 'CADASTRO RED',   icon: '📋', group: 'RED CARPET' },
+  { id: 'p_fotografia_red', name: 'FOTOGRAFIA RED',  icon: '📸', group: 'RED CARPET' },
+  { id: 'p_expedicao_red',  name: 'EXPEDIÇÃO RED',   icon: '🚚', group: 'RED CARPET' },
+];
+
+// ================================================================
+//  HELPERS
+// ================================================================
+const fmt = (n) => n === 0 ? '0' : Number(n).toLocaleString('pt-BR');
+const todayISO = () => new Date().toISOString().split('T')[0];
+const todayBR = () => {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+};
+const isoToBR = (iso) => { const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`; };
+const brToISO = (br) => { const [d,m,y] = br.split('/'); return `${y}-${m}-${d}`; };
+
+// ================================================================
+//  STATE
+// ================================================================
+let capacityRecords = [];
+let productionRecords = [];
+let currentFilter = 'all';
+let editingId = null;
+
+// ================================================================
+//  SEED DATA
+// ================================================================
+function seedData() {
+  if (DB.getCapacity().length === 0) {
+    const seed = [
+      { id: 1, date: '15/05/2026', colaboradores: 40, inbound: 10642, outbound: 7185, redCarpet: 291, total: 18118, areas: {} },
+      { id: 2, date: '14/05/2026', colaboradores: 49, inbound: 13195, outbound: 7799, redCarpet: 291, total: 21285, areas: {} },
+      { id: 3, date: '13/05/2026', colaboradores: 45, inbound: 10918, outbound: 7850, redCarpet: 291, total: 19059, areas: {} },
+      { id: 4, date: '11/05/2026', colaboradores: 33, inbound: 11084, outbound: 6021, redCarpet: 375, total: 17480, areas: {} },
+      { id: 5, date: '08/05/2026', colaboradores: 23, inbound: 8927, outbound: 0, redCarpet: 0, total: 8927, areas: {} },
+    ];
+    DB.saveCapacity(seed);
+  }
+  if (DB.getProduction().length === 0) {
+    const seed = [{
+      id: 1, date: '15/05/2026',
+      areas: { p_check_in:715, p_armazenagem:1489, p_picking:1389, p_conferencia:1787, p_expedicao:1787, p_cadastro_red:99, p_fotografia_red:52, p_criacao_lotes:113, p_triagem:853, p_cadastro:937, p_passadoria:1049, p_fotografia:592, p_dobra:429 }
+    }];
+    DB.saveProduction(seed);
+  }
+}
+
+// ================================================================
+//  NAVIGATION
+// ================================================================
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + btn.dataset.page).classList.add('active');
+    if (btn.dataset.page === 'producao') renderProducao();
+    if (btn.dataset.page === 'dashboard') renderDashboard();
+    if (btn.dataset.page === 'ranking') renderRanking();
+    if (btn.dataset.page === 'metas') renderMetas();
+    if (btn.dataset.page === 'config') renderConfig();
+  });
+});
+
+// ================================================================
+//  CAPACIDADE — RENDER
+// ================================================================
+function getFilteredRecords() {
+  const recs = capacityRecords;
+  const today = todayBR();
+  if (currentFilter === 'hoje') return recs.filter(r => r.date === today);
+  if (currentFilter === '7d' || currentFilter === '30d') {
+    const days = currentFilter === '7d' ? 7 : 30;
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - days * 86400000);
+    return recs.filter(r => {
+      const [d,m,y] = r.date.split('/');
+      return new Date(`${y}-${m}-${d}`) >= cutoff;
+    });
+  }
+  if (currentFilter === 'custom') {
+    const from = document.getElementById('filter-from').value;
+    const to = document.getElementById('filter-to').value;
+    return recs.filter(r => {
+      const iso = brToISO(r.date);
+      return (!from || iso >= from) && (!to || iso <= to);
+    });
+  }
+  return recs;
+}
+
+function renderCapacidade() {
+  const filtered = getFilteredRecords();
+  const today = todayBR();
+
+  // KPIs
+  document.getElementById('kpi-dias').textContent = filtered.length;
+  const todayRec = capacityRecords.find(r => r.date === today);
+  document.getElementById('kpi-hoje').textContent = fmt(todayRec?.total || 0);
+  const avg = filtered.length ? Math.round(filtered.reduce((s,r) => s + r.total, 0) / filtered.length) : 0;
+  document.getElementById('kpi-media').textContent = fmt(avg);
+  const max = filtered.length ? Math.max(...filtered.map(r => r.total)) : 0;
+  document.getElementById('kpi-max').textContent = fmt(max);
+
+  // Table
+  const tbody = document.getElementById('capacity-table-body');
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Nenhum registro encontrado</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(r => `
+    <tr>
+      <td>${r.date}${r.date === today ? '<span class="badge-hoje">hoje</span>' : ''}</td>
+      <td class="center">${r.colaboradores}</td>
+      <td class="center color-cyan">${fmt(r.inbound)}</td>
+      <td class="center color-purple">${fmt(r.outbound)}</td>
+      <td class="center color-yellow">${fmt(r.redCarpet)}</td>
+      <td class="center color-green">${fmt(r.total)}</td>
+      <td>
+        <div class="td-actions">
+          <button class="btn-icon edit" onclick="editRecord(${r.id})" title="Editar">✏️</button>
+          <button class="btn-icon delete" onclick="deleteRecord(${r.id})" title="Excluir">🗑️</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// FILTER
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    renderCapacidade();
+  });
+});
+document.getElementById('filter-from').addEventListener('change', () => { currentFilter = 'custom'; document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active')); renderCapacidade(); });
+document.getElementById('filter-to').addEventListener('change', () => { currentFilter = 'custom'; document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active')); renderCapacidade(); });
+
+function clearFilter() {
+  currentFilter = 'all';
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('filter-from').value = '';
+  document.getElementById('filter-to').value = '';
+  renderCapacidade();
+}
+
+function deleteRecord(id) {
+  if (!confirm('Excluir este registro?')) return;
+  capacityRecords = capacityRecords.filter(r => r.id !== id);
+  DB.saveCapacity(capacityRecords);
+  renderCapacidade();
+}
+
+function editRecord(id) {
+  editingId = id;
+  openModal();
+}
+
+function exportCSV() {
+  const recs = getFilteredRecords();
+  let csv = 'Data,Colaboradores,Inbound,Outbound,Red Carpet,Total\n';
+  recs.forEach(r => { csv += `${r.date},${r.colaboradores},${r.inbound},${r.outbound},${r.redCarpet},${r.total}\n`; });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'capacidade_diaria.csv';
+  a.click();
+}
+
+// ================================================================
+//  MODAL — REGISTRAR CAPACIDADE
+// ================================================================
+function openModal() {
+  const overlay = document.getElementById('modal-overlay');
+  const body = document.getElementById('modal-body');
+  const title = document.getElementById('modal-title');
+
+  const editing = editingId ? capacityRecords.find(r => r.id === editingId) : null;
+  title.textContent = editing ? '✏️ Editar Capacidade' : '📋 Registrar Capacidade do Dia';
+
+  const getAreaData = (areaId, defaultPdia) => {
+    if (editing?.areas?.[areaId]) return editing.areas[areaId];
+    return { fixos: 0, treinamento: 0, pecasDia: defaultPdia, pecasTrein: Math.round(defaultPdia * 0.6) };
+  };
+
+  const dateVal = editing ? brToISO(editing.date) : todayISO();
+
+  const renderGroup = (groupName, areas, color) => {
+    let html = `<div class="section-title" style="color:${color}">${groupName}</div><table><thead><tr>
+      <th style="text-align:left">Área</th><th>Fixos</th><th>Em Treinamento</th>
+      <th>Peças/Dia Fixos</th><th>Peças/Dia Trein. (60%)</th>
+      <th>Cap. Fixos</th><th>Cap. Treinamento</th><th>Cap. Total</th>
+    </tr></thead><tbody>`;
+
+    areas.forEach(a => {
+      const d = getAreaData(a.id, getAreaPdia(a));
+      html += `<tr>
+        <td style="text-align:left">${a.icon} ${a.name}</td>
+        <td><input type="number" min="0" value="${d.fixos}" data-area="${a.id}" data-field="fixos" onchange="recalcModal()"></td>
+        <td><input type="number" min="0" value="${d.treinamento}" data-area="${a.id}" data-field="treinamento" onchange="recalcModal()"></td>
+        <td><input type="number" min="0" value="${d.pecasDia}" data-area="${a.id}" data-field="pecasDia" onchange="recalcModal()"></td>
+        <td class="color-green" data-area="${a.id}" data-calc="pecasTrein">${fmt(d.pecasTrein)}</td>
+        <td class="color-yellow" data-area="${a.id}" data-calc="capFixos">${fmt(d.fixos * d.pecasDia)}</td>
+        <td class="color-cyan" data-area="${a.id}" data-calc="capTrein">${fmt(d.treinamento * d.pecasTrein)}</td>
+        <td class="color-green" style="font-weight:700" data-area="${a.id}" data-calc="capTotal">${fmt(d.fixos * d.pecasDia + d.treinamento * d.pecasTrein)}</td>
+      </tr>`;
+    });
+
+    html += `<tr class="subtotal-row">
+      <td style="color:${color};text-align:left;font-weight:700">SUBTOTAL ${groupName}</td>
+      <td data-group="${groupName}" data-calc="sumFixos">0</td>
+      <td data-group="${groupName}" data-calc="sumTrein">0</td>
+      <td></td><td></td>
+      <td class="color-yellow" data-group="${groupName}" data-calc="sumCapFixos">0</td>
+      <td class="color-cyan" data-group="${groupName}" data-calc="sumCapTrein">0</td>
+      <td style="color:${color};font-weight:700" data-group="${groupName}" data-calc="sumCapTotal">0</td>
+    </tr></tbody></table>`;
+    return html;
+  };
+
+  body.innerHTML = `
+    <div class="date-row">
+      <span class="filter-label">Data <span style="color:var(--red)">*</span></span>
+      <input type="date" id="modal-date" value="${dateVal}">
+      <button class="btn btn-ghost" onclick="document.getElementById('modal-date').value='${todayISO()}'">Hoje</button>
+    </div>
+    ${renderGroup('INBOUND', INBOUND_AREAS, 'var(--cyan)')}
+    ${renderGroup('OUTBOUND', OUTBOUND_AREAS, 'var(--purple)')}
+    ${renderGroup('RED CARPET', RED_CARPET_AREAS, 'var(--yellow)')}
+    <div class="totals-bar">
+      <div class="total-item"><span class="total-label">Colaboradores</span><span class="total-value" id="modal-total-colab">0</span></div>
+      <div class="total-item"><span class="total-label" style="color:var(--cyan)">Inbound</span><span class="total-value color-cyan" id="modal-total-inbound">0</span></div>
+      <div class="total-item"><span class="total-label" style="color:var(--purple)">Outbound</span><span class="total-value color-purple" id="modal-total-outbound">0</span></div>
+      <div class="total-item"><span class="total-label" style="color:var(--yellow)">Red Carpet</span><span class="total-value color-yellow" id="modal-total-red">0</span></div>
+      <div class="total-item"><span class="total-label">Total Geral</span><span class="total-value big color-green" id="modal-total-geral">0</span></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="saveCapacidade()">💾 Salvar registro</button>
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+    </div>
+  `;
+
+  recalcModal();
+  overlay.style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').style.display = 'none';
+  editingId = null;
+}
+
+function recalcModal() {
+  const getVal = (area, field) => {
+    const el = document.querySelector(`input[data-area="${area}"][data-field="${field}"]`);
+    return el ? (Number(el.value) || 0) : 0;
+  };
+  const setCalc = (area, calc, val) => {
+    const el = document.querySelector(`[data-area="${area}"][data-calc="${calc}"]`);
+    if (el) el.textContent = fmt(val);
+  };
+  const setGroup = (group, calc, val) => {
+    const el = document.querySelector(`[data-group="${group}"][data-calc="${calc}"]`);
+    if (el) el.textContent = fmt(val);
+  };
+
+  const groups = { 'INBOUND': INBOUND_AREAS, 'OUTBOUND': OUTBOUND_AREAS, 'RED CARPET': RED_CARPET_AREAS };
+  let totalColab = 0, totalInbound = 0, totalOutbound = 0, totalRed = 0;
+
+  Object.entries(groups).forEach(([groupName, areas]) => {
+    let gFixos = 0, gTrein = 0, gCapFixos = 0, gCapTrein = 0, gCapTotal = 0;
+    areas.forEach(a => {
+      const fixos = getVal(a.id, 'fixos');
+      const trein = getVal(a.id, 'treinamento');
+      const pdia = getVal(a.id, 'pecasDia');
+      const ptrein = Math.round(pdia * 0.6);
+      const capF = fixos * pdia;
+      const capT = trein * ptrein;
+
+      setCalc(a.id, 'pecasTrein', ptrein);
+      setCalc(a.id, 'capFixos', capF);
+      setCalc(a.id, 'capTrein', capT);
+      setCalc(a.id, 'capTotal', capF + capT);
+
+      gFixos += fixos; gTrein += trein;
+      gCapFixos += capF; gCapTrein += capT; gCapTotal += capF + capT;
+    });
+    setGroup(groupName, 'sumFixos', gFixos);
+    setGroup(groupName, 'sumTrein', gTrein);
+    setGroup(groupName, 'sumCapFixos', gCapFixos);
+    setGroup(groupName, 'sumCapTrein', gCapTrein);
+    setGroup(groupName, 'sumCapTotal', gCapTotal);
+
+    totalColab += gFixos + gTrein;
+    if (groupName === 'INBOUND') totalInbound = gCapTotal;
+    if (groupName === 'OUTBOUND') totalOutbound = gCapTotal;
+    if (groupName === 'RED CARPET') totalRed = gCapTotal;
+  });
+
+  document.getElementById('modal-total-colab').textContent = fmt(totalColab);
+  document.getElementById('modal-total-inbound').textContent = fmt(totalInbound);
+  document.getElementById('modal-total-outbound').textContent = fmt(totalOutbound);
+  document.getElementById('modal-total-red').textContent = fmt(totalRed);
+  document.getElementById('modal-total-geral').textContent = fmt(totalInbound + totalOutbound + totalRed);
+}
+
+function saveCapacidade() {
+  const dateISO = document.getElementById('modal-date').value;
+  if (!dateISO) { alert('Selecione uma data'); return; }
+  const dateBR = isoToBR(dateISO);
+
+  // collect areas
+  const areas = {};
+  ALL_CAP_AREAS.forEach(a => {
+    const fixos = Number(document.querySelector(`input[data-area="${a.id}"][data-field="fixos"]`)?.value) || 0;
+    const trein = Number(document.querySelector(`input[data-area="${a.id}"][data-field="treinamento"]`)?.value) || 0;
+    const pdia = Number(document.querySelector(`input[data-area="${a.id}"][data-field="pecasDia"]`)?.value) || 0;
+    const ptrein = Math.round(pdia * 0.6);
+    areas[a.id] = { fixos, treinamento: trein, pecasDia: pdia, pecasTrein: ptrein };
+  });
+
+  const calcGroup = (list) => list.reduce((s, a) => {
+    const d = areas[a.id];
+    return s + (d.fixos * d.pecasDia) + (d.treinamento * d.pecasTrein);
+  }, 0);
+
+  const inbound = calcGroup(INBOUND_AREAS);
+  const outbound = calcGroup(OUTBOUND_AREAS);
+  const redCarpet = calcGroup(RED_CARPET_AREAS);
+  const colab = ALL_CAP_AREAS.reduce((s, a) => s + areas[a.id].fixos + areas[a.id].treinamento, 0);
+
+  const record = {
+    id: editingId || Date.now(),
+    date: dateBR,
+    colaboradores: colab,
+    inbound, outbound, redCarpet,
+    total: inbound + outbound + redCarpet,
+    areas,
+  };
+
+  if (editingId) {
+    capacityRecords = capacityRecords.map(r => r.id === editingId ? record : r);
+  } else {
+    capacityRecords.unshift(record);
+  }
+
+  DB.saveCapacity(capacityRecords);
+  closeModal();
+  renderCapacidade();
+}
+
+// ================================================================
+//  PRODUÇÃO MANUAL
+// ================================================================
+function renderProducao() {
+  const grid = document.getElementById('prod-grid');
+  const dateInput = document.getElementById('prod-date');
+  dateInput.value = todayISO();
+
+  const existing = productionRecords.find(r => r.date === todayBR());
+
+  const groups = ['INBOUND', 'OUTBOUND', 'RED CARPET'];
+  const groupColors = { 'INBOUND': 'var(--cyan)', 'OUTBOUND': 'var(--purple)', 'RED CARPET': 'var(--yellow)' };
+  let html = '';
+  groups.forEach(g => {
+    const items = PRODUCAO_AREAS.filter(a => a.group === g);
+    html += `<div style="grid-column:1/-1;margin-top:12px;margin-bottom:4px;">
+      <span class="section-title" style="color:${groupColors[g]}">${g}</span>
+    </div>`;
+    items.forEach(a => {
+      const val = existing?.areas?.[a.id] || '';
+      const saved = existing ? true : false;
+      html += `
+        <div class="prod-item">
+          <label class="prod-label">${a.icon} ${a.name}</label>
+          <input class="prod-input" type="number" min="0" data-prod="${a.id}" value="${val}" placeholder="0">
+          <span class="saved-tag" data-saved="${a.id}" style="visibility:${saved ? 'visible' : 'hidden'}">✓ salvo</span>
+        </div>`;
+    });
+  });
+  grid.innerHTML = html;
+
+  // date change listener
+  dateInput.onchange = () => {
+    const dateBR = isoToBR(dateInput.value);
+    const rec = productionRecords.find(r => r.date === dateBR);
+    PRODUCAO_AREAS.forEach(a => {
+      const input = document.querySelector(`input[data-prod="${a.id}"]`);
+      const tag = document.querySelector(`[data-saved="${a.id}"]`);
+      if (input) input.value = rec?.areas?.[a.id] || '';
+      if (tag) tag.style.visibility = rec ? 'visible' : 'hidden';
+    });
+  };
+}
+
+function setProdDateToday() {
+  document.getElementById('prod-date').value = todayISO();
+  document.getElementById('prod-date').onchange();
+}
+
+function saveProducao() {
+  const dateISO = document.getElementById('prod-date').value;
+  if (!dateISO) { alert('Selecione uma data'); return; }
+  const dateBR = isoToBR(dateISO);
+
+  const areas = {};
+  PRODUCAO_AREAS.forEach(a => {
+    areas[a.id] = Number(document.querySelector(`input[data-prod="${a.id}"]`)?.value) || 0;
+  });
+
+  const idx = productionRecords.findIndex(r => r.date === dateBR);
+  const record = { id: idx >= 0 ? productionRecords[idx].id : Date.now(), date: dateBR, areas };
+
+  if (idx >= 0) {
+    productionRecords[idx] = record;
+  } else {
+    productionRecords.unshift(record);
+  }
+
+  DB.saveProduction(productionRecords);
+
+  // show saved indicators
+  PRODUCAO_AREAS.forEach(a => {
+    const tag = document.querySelector(`[data-saved="${a.id}"]`);
+    if (tag) tag.style.visibility = 'visible';
+  });
+}
+
+// ================================================================
+//  DASHBOARD
+// ================================================================
+
+// Mapeamento: área de capacidade → chave de produção
+const CAP_TO_PROD = {
+  criacao_lotes: 'p_criacao_lotes',
+  triagem:       'p_triagem',
+  cadastro:      'p_cadastro',
+  passadoria:    'p_passadoria',
+  fotografia:    'p_fotografia',
+  dobra:         'p_dobra',
+  check_in:      'p_check_in',
+  armazenagem:   'p_armazenagem',
+  picking:       'p_picking',
+  conferencia:   'p_conferencia',
+  expedicao:     'p_expedicao',
+  cadastro_red:  'p_cadastro_red',
+  fotografia_red: 'p_fotografia_red',
+  expedicao_red:  'p_expedicao_red',
+};
+
+const DASH_GROUPS = [
+  { name: 'INBOUND',     color: 'var(--cyan)',   areas: INBOUND_AREAS },
+  { name: 'OUTBOUND',    color: 'var(--purple)', areas: OUTBOUND_AREAS },
+  { name: 'RED CARPET',  color: 'var(--yellow)', areas: RED_CARPET_AREAS },
+];
+
+let dashJustif = {}; // { "15/05/2026_criacao_lotes": "motivo..." }
+
+function pctClass(pct) {
+  if (pct >= 100) return { pct: 'pct-good', bar: 'bar-good' };
+  if (pct >= 70)  return { pct: 'pct-mid',  bar: 'bar-mid'  };
+  return               { pct: 'pct-low',  bar: 'bar-low'  };
+}
+
+function renderDashboard() {
+  dashJustif = DB.getJustif();
+
+  const dateInput = document.getElementById('dash-date');
+  if (!dateInput.value) dateInput.value = todayISO();
+  dateInput.onchange = renderDashboard;
+
+  const dateBR = isoToBR(dateInput.value);
+  document.getElementById('dash-date-label').textContent = dateBR;
+
+  // find records
+  const capRec = capacityRecords.find(r => r.date === dateBR);
+  const prodRec = productionRecords.find(r => r.date === dateBR);
+
+  const body = document.getElementById('dash-table-body');
+
+  if (!capRec && !prodRec) {
+    body.innerHTML = `<div class="dash-empty">Nenhum dado de capacidade ou produção registrado para <strong>${dateBR}</strong>.</div>`;
+    ['dash-kpi-cap','dash-kpi-prod','dash-kpi-pct','dash-kpi-ok','dash-kpi-nok'].forEach(id => {
+      document.getElementById(id).textContent = '—';
+    });
+    return;
+  }
+
+  // build rows data
+  let totalCap = 0, totalProd = 0, countOk = 0, countNok = 0;
+  const allAreaRows = []; // { area, group, cap, prod, pct }
+
+  DASH_GROUPS.forEach(g => {
+    g.areas.forEach(a => {
+      let cap = 0;
+      if (capRec?.areas?.[a.id]) {
+        const d = capRec.areas[a.id];
+        cap = (d.fixos * d.pecasDia) + (d.treinamento * d.pecasTrein);
+      } else if (capRec) {
+        // fallback: use the totals proportionally — just show 0
+        cap = 0;
+      }
+      const prodKey = CAP_TO_PROD[a.id];
+      const prod = prodRec?.areas?.[prodKey] || 0;
+      const pct = cap > 0 ? Math.round((prod / cap) * 100) : (prod > 0 ? 999 : 0);
+      totalCap += cap; totalProd += prod;
+      if (pct >= 100) countOk++; else countNok++;
+      allAreaRows.push({ area: a, group: g, cap, prod, pct });
+    });
+  });
+
+  const totalPct = totalCap > 0 ? Math.round((totalProd / totalCap) * 100) : 0;
+  const totalPctCls = pctClass(totalPct);
+
+  document.getElementById('dash-kpi-cap').textContent = fmt(totalCap);
+  document.getElementById('dash-kpi-prod').textContent = fmt(totalProd);
+  document.getElementById('dash-kpi-pct').textContent = totalPct + '%';
+  document.getElementById('dash-kpi-pct').style.color = `var(--${totalPctCls.pct.replace('pct-','') === 'good' ? 'green' : totalPctCls.pct.replace('pct-','') === 'mid' ? 'yellow' : 'red'})`;
+  document.getElementById('dash-kpi-ok').textContent = countOk;
+  document.getElementById('dash-kpi-nok').textContent = countNok;
+
+  // render table
+  let html = `<table>
+    <thead><tr>
+      <th>Área</th>
+      <th class="center">Capacidade</th>
+      <th class="center">Produção Real</th>
+      <th class="center">% Atingido</th>
+      <th class="center">Barra</th>
+    </tr></thead><tbody>`;
+
+  let lastGroup = null;
+  allAreaRows.forEach(({ area, group, cap, prod, pct }) => {
+    if (group.name !== lastGroup) {
+      lastGroup = group.name;
+      html += `<tr><td colspan="5" style="padding:0">
+        <div class="dash-group-header" style="background:${group.color}18;color:${group.color}">
+          <span>${group.name}</span>
+        </div></td></tr>`;
+    }
+
+    const cls = pctClass(pct);
+    const barW = Math.min(pct, 200); // cap visual at 200%
+    const justifKey = `${dateBR}_${area.id}`;
+    const justifVal = dashJustif[justifKey] || '';
+    const showJustif = pct < 100;
+
+    html += `<tr style="cursor:default">
+      <td><strong style="color:var(--text-primary);font-size:13px">${area.icon} ${area.name}</strong>
+        <span style="font-size:10px;color:var(--text-muted);margin-left:6px;font-weight:500">manual</span>
+      </td>
+      <td class="center" style="color:var(--text-primary);font-weight:700">${fmt(cap)}</td>
+      <td class="center" style="color:var(--text-primary);font-weight:700">${fmt(prod)}</td>
+      <td class="center"><span class="${cls.pct}" style="font-weight:700;font-size:13.5px">${pct}%</span></td>
+      <td class="center">
+        <span class="bar-track">
+          <span class="bar-fill ${cls.bar}" style="width:${Math.min(barW/2,100)}%"></span>
+        </span>
+      </td>
+    </tr>`;
+
+    if (showJustif) {
+      const saved = justifVal.trim().length > 0;
+      html += `<tr class="justif-row">
+        <td colspan="5" class="justif-cell">
+          <div class="justif-wrap">
+            <span class="justif-icon">⚠️</span>
+            <div style="flex:1">
+              <div class="justif-label">Justificativa</div>
+              <textarea class="justif-input"
+                id="justif-${area.id}"
+                placeholder="Descreva o motivo pelo qual a área não atingiu a capacidade..."
+                rows="2"
+              >${justifVal}</textarea>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+              <button class="btn-justif-save" onclick="saveJustif('${dateBR}','${area.id}')">Salvar</button>
+              ${saved ? `<span class="justif-saved">✓ salvo</span>` : ''}
+            </div>
+          </div>
+        </td>
+      </tr>`;
+    }
+  });
+
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+
+function setDashToday() {
+  document.getElementById('dash-date').value = todayISO();
+  renderDashboard();
+}
+
+function saveJustif(dateBR, areaId) {
+  const key = `${dateBR}_${areaId}`;
+  const val = document.getElementById(`justif-${areaId}`)?.value || '';
+  dashJustif[key] = val;
+  DB.saveJustif(dashJustif);
+  renderDashboard();
+}
+
+function exportDashCSV() {
+  const dateBR = isoToBR(document.getElementById('dash-date').value || todayISO());
+  const capRec = capacityRecords.find(r => r.date === dateBR);
+  const prodRec = productionRecords.find(r => r.date === dateBR);
+  let csv = 'Data,Área,Capacidade,Produção Real,% Atingido,Justificativa\n';
+  DASH_GROUPS.forEach(g => {
+    g.areas.forEach(a => {
+      let cap = 0;
+      if (capRec?.areas?.[a.id]) {
+        const d = capRec.areas[a.id];
+        cap = (d.fixos * d.pecasDia) + (d.treinamento * d.pecasTrein);
+      }
+      const prod = prodRec?.areas?.[CAP_TO_PROD[a.id]] || 0;
+      const pct = cap > 0 ? Math.round((prod / cap) * 100) : 0;
+      const justif = (dashJustif[`${dateBR}_${a.id}`] || '').replace(/"/g, '""');
+      csv += `${dateBR},"${a.name}",${cap},${prod},${pct}%,"${justif}"\n`;
+    });
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `dashboard_${dateBR.replace(/\//g,'-')}.csv`;
+  link.click();
+}
+
+// ================================================================
+//  RANKING DE ÁREAS
+// ================================================================
+let rankPeriod = '7d';
+
+const ALL_RANK_AREAS = [
+  ...INBOUND_AREAS.map(a => ({ ...a, group: 'INBOUND',     groupColor: 'var(--cyan)'   })),
+  ...OUTBOUND_AREAS.map(a => ({ ...a, group: 'OUTBOUND',   groupColor: 'var(--purple)' })),
+  ...RED_CARPET_AREAS.map(a => ({ ...a, group: 'RED CARPET', groupColor: 'var(--yellow)' })),
+];
+
+function getRankDateRange() {
+  const now = new Date();
+  if (rankPeriod === 'custom') {
+    const from = document.getElementById('rank-from')?.value;
+    const to   = document.getElementById('rank-to')?.value;
+    return { from: from || null, to: to || null };
+  }
+  const days = rankPeriod === '7d' ? 7 : rankPeriod === '15d' ? 15 : 30;
+  const from = new Date(now.getTime() - days * 86400000).toISOString().split('T')[0];
+  return { from, to: now.toISOString().split('T')[0] };
+}
+
+function recInRange(dateBR, from, to) {
+  const [d,m,y] = dateBR.split('/');
+  const iso = `${y}-${m}-${d}`;
+  return (!from || iso >= from) && (!to || iso <= to);
+}
+
+function buildRankData() {
+  const { from, to } = getRankDateRange();
+  const capInRange  = capacityRecords.filter(r => recInRange(r.date, from, to));
+  const prodInRange = productionRecords.filter(r => recInRange(r.date, from, to));
+
+  return ALL_RANK_AREAS.map(area => {
+    const days = [];
+    capInRange.forEach(capRec => {
+      const d = capRec.areas?.[area.id];
+      if (!d) return;
+      const cap = (d.fixos * d.pecasDia) + (d.treinamento * d.pecasTrein);
+      if (cap === 0) return;
+      const prodRec = prodInRange.find(p => p.date === capRec.date);
+      const prod = prodRec?.areas?.[CAP_TO_PROD[area.id]] || 0;
+      const pct  = Math.round((prod / cap) * 100);
+      days.push({ date: capRec.date, cap, prod, pct, hit: pct >= 100 });
+    });
+
+    const daysWithData = days.length;
+    const daysHit      = days.filter(d => d.hit).length;
+    const taxaMeta     = daysWithData > 0 ? Math.round((daysHit / daysWithData) * 100) : 0;
+    const avgPct       = daysWithData > 0 ? Math.round(days.reduce((s,d) => s + d.pct, 0) / daysWithData) : 0;
+
+    return { ...area, days, daysWithData, daysHit, taxaMeta, avgPct };
+  });
+}
+
+function posClass(i) {
+  if (i === 0) return 'gold';
+  if (i === 1) return 'silver';
+  if (i === 2) return 'bronze';
+  return 'other';
+}
+
+function renderRankCard(item, pos) {
+  const cls = pctClass(item.avgPct);
+  const barW = Math.min(item.avgPct, 100);
+  return `
+    <div class="rank-card">
+      <span class="rank-pos ${posClass(pos)}">${pos + 1}</span>
+      <div style="flex:1;min-width:0">
+        <div class="rank-area-name">${item.icon} ${item.name}</div>
+        <div class="rank-area-group" style="color:${item.groupColor}">${item.group}</div>
+        <div class="rank-mini-bar">
+          <div class="rank-mini-fill ${cls.bar}" style="width:${barW}%"></div>
+        </div>
+      </div>
+      <div>
+        <div class="rank-pct-big ${cls.pct}">${item.avgPct}%</div>
+        <div style="font-size:10.5px;color:var(--text-muted);text-align:right;margin-top:2px">${item.daysHit}/${item.daysWithData} dias</div>
+      </div>
+    </div>`;
+}
+
+function renderRanking() {
+  const data = buildRankData();
+  const { from, to } = getRankDateRange();
+
+  // filter only areas with data
+  const withData = data.filter(a => a.daysWithData > 0);
+  const sorted   = [...withData].sort((a,b) => b.avgPct - a.avgPct);
+  const sortedAsc = [...withData].sort((a,b) => a.avgPct - b.avgPct);
+
+  // how many distinct days in range
+  const allDates = [...new Set([
+    ...capacityRecords.filter(r => recInRange(r.date, from, to)).map(r => r.date),
+    ...productionRecords.filter(r => recInRange(r.date, from, to)).map(r => r.date),
+  ])];
+
+  // KPIs
+  document.getElementById('rank-kpi-dias').textContent = allDates.length;
+  document.getElementById('rank-kpi-best').textContent  = sorted[0]  ? `${sorted[0].icon} ${sorted[0].name}` : '—';
+  document.getElementById('rank-kpi-worst').textContent = sortedAsc[0] ? `${sortedAsc[0].icon} ${sortedAsc[0].name}` : '—';
+  const globalAvg = withData.length ? Math.round(withData.reduce((s,a) => s + a.avgPct, 0) / withData.length) : 0;
+  const globalCls = pctClass(globalAvg);
+  const avgEl = document.getElementById('rank-kpi-avg');
+  avgEl.textContent = globalAvg + '%';
+  avgEl.style.color = `var(--${globalCls.bar.replace('bar-','') === 'good' ? 'green' : globalCls.bar.replace('bar-','') === 'mid' ? 'yellow' : 'red'})`;
+
+  // top 5 / bottom 5
+  const top5 = sorted.slice(0, 5);
+  const bot5 = sortedAsc.slice(0, 5);
+  document.getElementById('rank-top-body').innerHTML = top5.length
+    ? top5.map((a,i) => renderRankCard(a, i)).join('')
+    : '<div style="padding:32px;text-align:center;color:var(--text-muted)">Sem dados no período</div>';
+  document.getElementById('rank-bot-body').innerHTML = bot5.length
+    ? bot5.map((a,i) => renderRankCard(a, i)).join('')
+    : '<div style="padding:32px;text-align:center;color:var(--text-muted)">Sem dados no período</div>';
+
+  // full table
+  const allSorted = [...withData].sort((a,b) => b.avgPct - a.avgPct);
+  const noData    = data.filter(a => a.daysWithData === 0);
+
+  const fullRows = allSorted.map((a, i) => {
+    const cls = pctClass(a.avgPct);
+    // consistency dots: last N days sorted by date
+    const daysSorted = [...a.days].sort((x,y) => {
+      const toISO = br => { const [d,m,y]=br.split('/'); return `${y}-${m}-${d}`; };
+      return toISO(x.date) > toISO(y.date) ? 1 : -1;
+    });
+    const dots = daysSorted.slice(-14).map(d => {
+      const c = d.hit ? 'var(--green)' : d.pct >= 70 ? 'var(--yellow)' : 'var(--red)';
+      return `<span class="day-dot" style="background:${c}" title="${d.date}: ${d.pct}%"></span>`;
+    }).join('');
+
+    return `<tr>
+      <td style="color:var(--text-muted);font-weight:700;font-size:13px">${i+1}</td>
+      <td>
+        <span style="font-weight:700;color:var(--text-primary)">${a.icon} ${a.name}</span>
+        <span style="font-size:10px;color:${a.groupColor};margin-left:6px;font-weight:600">${a.group}</span>
+      </td>
+      <td class="center" style="color:var(--text-secondary)">${a.daysWithData}</td>
+      <td class="center" style="color:var(--text-secondary)">${a.daysHit}</td>
+      <td class="center">
+        <span style="font-weight:700;font-size:14px" class="${cls.pct}">${a.taxaMeta}%</span>
+      </td>
+      <td class="center">
+        <span style="font-family:var(--font-mono);font-weight:800;font-size:15px" class="${cls.pct}">${a.avgPct}%</span>
+      </td>
+      <td class="center">
+        <div class="consistency-bar">${dots || '<span style="color:var(--text-muted);font-size:11px">sem histórico</span>'}</div>
+      </td>
+    </tr>`;
+  });
+
+  // áreas sem dados
+  const noDataRows = noData.map(a => `
+    <tr>
+      <td style="color:var(--text-muted)">—</td>
+      <td><span style="color:var(--text-muted)">${a.icon} ${a.name}</span>
+        <span style="font-size:10px;color:${a.groupColor};margin-left:6px">${a.group}</span>
+      </td>
+      <td class="center" colspan="5" style="color:var(--text-muted);font-size:12px">Sem dados no período</td>
+    </tr>`).join('');
+
+  document.getElementById('rank-full-body').innerHTML = fullRows.join('') + noDataRows
+    || '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">Sem dados no período selecionado</td></tr>';
+}
+
+function exportRankingCSV() {
+  const data = buildRankData().filter(a => a.daysWithData > 0)
+    .sort((a,b) => b.avgPct - a.avgPct);
+  let csv = 'Posição,Área,Grupo,Dias com dados,Dias na meta,Taxa de meta (%),% Médio Atingido\n';
+  data.forEach((a,i) => {
+    csv += `${i+1},"${a.name}",${a.group},${a.daysWithData},${a.daysHit},${a.taxaMeta},${a.avgPct}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `ranking_areas_${rankPeriod}.csv`;
+  link.click();
+}
+
+// filtros do ranking
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.filter-btn-rank').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn-rank').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      rankPeriod = btn.dataset.rank;
+      const customDates = document.getElementById('rank-custom-dates');
+      customDates.style.display = rankPeriod === 'custom' ? 'flex' : 'none';
+      renderRanking();
+    });
+  });
+  ['rank-from','rank-to'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', renderRanking);
+  });
+});
+
+// ================================================================
+//  METAS MENSAIS
+// ================================================================
+let metasData = {}; // { "2026-5": { diasUteis: 20, areas: { triagem: { meta: 50000, pdiaMod: 330 }, ... } } }
+
+const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function getMetaKey() {
+  const mes = document.getElementById('meta-mes')?.value || new Date().getMonth()+1;
+  const ano = document.getElementById('meta-ano')?.value || new Date().getFullYear();
+  return `${ano}-${mes}`;
+}
+
+function getMetaRecord() {
+  const key = getMetaKey();
+  return metasData[key] || null;
+}
+
+// Pegar headcount atual do último registro de capacidade do mês selecionado
+function getHeadcountAtual(areaId) {
+  const mes = parseInt(document.getElementById('meta-mes')?.value);
+  const ano = parseInt(document.getElementById('meta-ano')?.value);
+  // procura o registro mais recente do mês
+  const recsDoMes = capacityRecords.filter(r => {
+    const [d,m,y] = r.date.split('/');
+    return parseInt(m) === mes && parseInt(y) === ano;
+  });
+  if (!recsDoMes.length) return null;
+  // pegar o mais recente
+  const latest = recsDoMes[0];
+  const a = latest.areas?.[areaId];
+  if (!a) return null;
+  return (a.fixos || 0) + (a.treinamento || 0);
+}
+
+function renderMetasTable() {
+  const key    = getMetaKey();
+  const rec    = metasData[key] || {};
+  const dias   = parseInt(document.getElementById('meta-dias-uteis')?.value) || 20;
+  const tbody  = document.getElementById('metas-table-body');
+
+  let totalMeta = 0, totalHc = 0, totalMetaDia = 0;
+  let html = '';
+
+  const GROUPS = [
+    { name: 'INBOUND',    color: 'var(--cyan)',   areas: INBOUND_AREAS },
+    { name: 'OUTBOUND',   color: 'var(--purple)', areas: OUTBOUND_AREAS },
+    { name: 'RED CARPET', color: 'var(--yellow)', areas: RED_CARPET_AREAS },
+  ];
+
+  GROUPS.forEach(g => {
+    html += `<tr>
+      <td colspan="4" style="padding:0">
+        <div style="padding:9px 20px;background:${g.color}18;border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+          font-size:11px;font-weight:700;letter-spacing:1.2px;color:${g.color};text-transform:uppercase">${g.name}</div>
+      </td>
+    </tr>`;
+
+    g.areas.forEach(a => {
+      const saved   = rec.areas?.[a.id] || {};
+      const meta    = saved.meta ?? 0;
+      const hc      = saved.hc   ?? '';
+      const metaDia = dias > 0 && meta > 0 ? Math.ceil(meta / dias) : 0;
+
+      totalMeta    += meta;
+      totalHc      += Number(hc) || 0;
+      totalMetaDia += metaDia;
+
+      html += `<tr>
+        <td style="font-weight:600;color:var(--text-primary)">${a.icon} ${a.name}</td>
+        <td class="center">
+          <input type="number" min="0" step="100"
+            class="meta-input" data-area="${a.id}" data-field="meta"
+            value="${meta || ''}" placeholder="0"
+            style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--cyan);
+              padding:9px 12px;border-radius:7px;font-family:var(--font-mono);font-size:14px;font-weight:700;
+              width:140px;text-align:center;outline:none"
+            oninput="recalcMetaRow(this)">
+        </td>
+        <td class="center">
+          <input type="number" min="0"
+            class="meta-input" data-area="${a.id}" data-field="hc"
+            value="${hc}" placeholder="0"
+            style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--purple);
+              padding:9px 12px;border-radius:7px;font-family:var(--font-mono);font-size:15px;font-weight:800;
+              width:90px;text-align:center;outline:none">
+        </td>
+        <td class="center" data-result="${a.id}-metadia"
+          style="color:var(--yellow);font-family:var(--font-mono);font-weight:700">
+          ${metaDia > 0 ? fmt(metaDia) : '—'}
+        </td>
+      </tr>`;
+    });
+  });
+
+  // TOTAL ROW
+  html += `<tr style="border-top:2px solid var(--border-light)">
+    <td style="font-weight:800;color:var(--text-primary);font-size:14px">TOTAL GERAL</td>
+    <td class="center" style="color:var(--cyan);font-family:var(--font-mono);font-weight:800;font-size:15px">${totalMeta > 0 ? fmt(totalMeta) : '—'}</td>
+    <td class="center" style="color:var(--purple);font-family:var(--font-mono);font-weight:800;font-size:17px">${totalHc > 0 ? totalHc : '—'}</td>
+    <td class="center" style="color:var(--yellow);font-family:var(--font-mono);font-weight:800">${totalMetaDia > 0 ? fmt(Math.round(totalMetaDia)) : '—'}</td>
+  </tr>`;
+
+  tbody.innerHTML = html;
+
+  // KPIs
+  document.getElementById('meta-kpi-total').textContent = totalMeta > 0 ? fmt(totalMeta) : '—';
+  document.getElementById('meta-kpi-hc').textContent    = totalHc   > 0 ? totalHc        : '—';
+  document.getElementById('meta-kpi-dia').textContent   = totalMetaDia > 0 ? fmt(Math.round(totalMetaDia)) : '—';
+  document.getElementById('meta-kpi-uteis').textContent = dias;
+}
+
+// Recalcula Meta/Dia ao vivo
+function recalcMetaRow(el) {
+  const areaId = el.dataset.area;
+  const dias   = parseInt(document.getElementById('meta-dias-uteis')?.value) || 20;
+  const metaEl = document.querySelector(`.meta-input[data-area="${areaId}"][data-field="meta"]`);
+  const meta   = parseInt(metaEl?.value) || 0;
+  const metaDia = dias > 0 && meta > 0 ? Math.ceil(meta / dias) : 0;
+  const cell = document.querySelector(`[data-result="${areaId}-metadia"]`);
+  if (cell) cell.innerHTML = metaDia > 0
+    ? `<span style="color:var(--yellow);font-family:var(--font-mono);font-weight:700">${fmt(metaDia)}</span>`
+    : '—';
+}
+
+function renderMetas() {
+  metasData = DB.getMetas();
+  const key = getMetaKey();
+  const rec = metasData[key];
+  if (rec?.diasUteis) document.getElementById('meta-dias-uteis').value = rec.diasUteis;
+  renderMetasTable();
+
+  document.getElementById('meta-mes').onchange       = () => { metasData = DB.getMetas(); renderMetas(); };
+  document.getElementById('meta-ano').onchange       = () => { metasData = DB.getMetas(); renderMetas(); };
+  document.getElementById('meta-dias-uteis').oninput = renderMetasTable;
+}
+
+function saveMetas() {
+  const key  = getMetaKey();
+  const dias = parseInt(document.getElementById('meta-dias-uteis')?.value) || 20;
+  const areas = {};
+
+  [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS].forEach(a => {
+    const metaEl = document.querySelector(`.meta-input[data-area="${a.id}"][data-field="meta"]`);
+    const hcEl   = document.querySelector(`.meta-input[data-area="${a.id}"][data-field="hc"]`);
+    areas[a.id] = {
+      meta: parseInt(metaEl?.value) || 0,
+      hc:   parseInt(hcEl?.value)   || 0,
+    };
+  });
+
+  metasData[key] = { diasUteis: dias, areas };
+  DB.saveMetas(metasData);
+
+  const btn = event.target;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '✓ Salvo!';
+  btn.style.borderColor = 'var(--green)';
+  btn.style.color = 'var(--green)';
+  setTimeout(() => { btn.innerHTML = orig; btn.style.borderColor = ''; btn.style.color = ''; }, 1800);
+}
+
+function exportMetasCSV() {
+  const key  = getMetaKey();
+  const mes  = document.getElementById('meta-mes')?.value;
+  const ano  = document.getElementById('meta-ano')?.value;
+  const dias = parseInt(document.getElementById('meta-dias-uteis')?.value) || 20;
+  let csv = `Mês,${MESES[mes]} ${ano}\nDias úteis,${dias}\n\nÁrea,Meta Mensal,HC Planejado,Meta/Dia\n`;
+
+  [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS].forEach(a => {
+    const saved   = metasData[key]?.areas?.[a.id] || {};
+    const meta    = saved.meta || 0;
+    const hc      = saved.hc   || 0;
+    const metaDia = dias > 0 && meta > 0 ? Math.ceil(meta / dias) : 0;
+    csv += `"${a.name}",${meta},${hc},${metaDia}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `metas_${MESES[mes]}_${ano}.csv`;
+  link.click();
+}
+
+// ================================================================
+//  GERAR IMAGEM — card vertical para compartilhar
+// ================================================================
+function gerarImagem() {
+  const dateISO = document.getElementById('dash-date')?.value;
+  if (!dateISO) { alert('Selecione uma data no Dashboard primeiro.'); return; }
+  const dateBR  = isoToBR(dateISO);
+  const capRec  = capacityRecords.find(r => r.date === dateBR);
+  const prodRec = productionRecords.find(r => r.date === dateBR);
+
+  if (!capRec && !prodRec) {
+    alert(`Sem dados registrados para ${dateBR}.`);
+    return;
+  }
+
+  // ---- montar dados das áreas ----
+  const rows = [];
+  const GROUPS_IMG = [
+    { name: 'INBOUND',    color: '#00e5ff', areas: INBOUND_AREAS },
+    { name: 'OUTBOUND',   color: '#b388ff', areas: OUTBOUND_AREAS },
+    { name: 'RED CARPET', color: '#ffd740', areas: RED_CARPET_AREAS },
+  ];
+
+  GROUPS_IMG.forEach(g => {
+    rows.push({ type: 'group', name: g.name, color: g.color });
+    g.areas.forEach(a => {
+      let cap = 0;
+      if (capRec?.areas?.[a.id]) {
+        const d = capRec.areas[a.id];
+        cap = (d.fixos * d.pecasDia) + (d.treinamento * d.pecasTrein);
+      }
+      const prod = prodRec?.areas?.[CAP_TO_PROD[a.id]] || 0;
+      const pct  = cap > 0 ? Math.round((prod / cap) * 100) : (prod > 0 ? 999 : 0);
+      const justifKey = `${dateBR}_${a.id}`;
+      const justif    = dashJustif[justifKey] || '';
+      rows.push({ type: 'area', icon: a.icon, name: a.name, cap, prod, pct, justif, groupColor: g.color });
+    });
+  });
+
+  // ---- calcular totais ----
+  const areaRows = rows.filter(r => r.type === 'area');
+  const totalCap  = areaRows.reduce((s,r) => s + r.cap,  0);
+  const totalProd = areaRows.reduce((s,r) => s + r.prod, 0);
+  const totalPct  = totalCap > 0 ? Math.round((totalProd / totalCap) * 100) : 0;
+  const okCount   = areaRows.filter(r => r.pct >= 100).length;
+  const nokCount  = areaRows.filter(r => r.pct < 100 && r.cap > 0).length;
+
+  // ---- dimensões lógicas (canvas interno em alta res) ----
+  const W        = 560;   // largura lógica
+  const PAD      = 28;    // padding lateral
+  const ROW_H    = 46;
+  const GROUP_H  = 26;
+  const HEADER_H = 120;
+  const KPI_H    = 84;
+  const TH_H     = 22;
+  const FOOTER_H = 44;
+  const justifCount = areaRows.filter(r => r.pct < 100 && r.justif.trim()).length;
+  const JUSTIF_H    = justifCount > 0 ? 28 + justifCount * 54 + 16 : 0;
+  const tableH   = rows.reduce((s,r) => s + (r.type === 'group' ? GROUP_H : ROW_H), 0);
+  const H        = HEADER_H + KPI_H + 12 + TH_H + tableH + JUSTIF_H + FOOTER_H + 16;
+
+  // colunas — mais espaço entre % e barra
+  const COL_CAP  = W - 230;   // cap  (centro)
+  const COL_PROD = W - 160;   // prod (centro)
+  const COL_PCT  = W - 96;    // %    (centro)
+  const BAR_X    = W - PAD - 44;  // início da barra (44px de distância do %)
+  const BAR_W    = 40;             // largura da barra
+
+  const DPR    = 2;
+  const canvas = document.getElementById('hidden-canvas');
+  canvas.width  = W * DPR;
+  canvas.height = H * DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+
+  // helpers
+  const hex2rgb = h => ({ r:parseInt(h.slice(1,3),16), g:parseInt(h.slice(3,5),16), b:parseInt(h.slice(5,7),16) });
+  const rr = (x,y,w,h,r) => {
+    if (w <= 0 || h <= 0) return;
+    const R = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+R, y);
+    ctx.arcTo(x+w, y,   x+w, y+h, R);
+    ctx.arcTo(x+w, y+h, x,   y+h, R);
+    ctx.arcTo(x,   y+h, x,   y,   R);
+    ctx.arcTo(x,   y,   x+w, y,   R);
+    ctx.closePath();
+  };
+
+  // fundo
+  ctx.fillStyle = '#060d1b';
+  ctx.fillRect(0, 0, W, H);
+
+  // borda
+  ctx.strokeStyle = '#1e3050';
+  ctx.lineWidth = 1;
+  rr(0.5, 0.5, W-1, H-1, 14);
+  ctx.stroke();
+
+  // gradiente topo
+  const grad = ctx.createLinearGradient(0,0,W,0);
+  grad.addColorStop(0, 'rgba(0,229,255,0.09)');
+  grad.addColorStop(1, 'rgba(179,136,255,0.06)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, HEADER_H);
+
+  // --- HEADER ---
+  ctx.font = 'bold 11px Arial';
+  ctx.fillStyle = '#00e5ff';
+  ctx.fillText('⚙️  PCP Control', PAD, 30);
+
+  ctx.font = 'bold 20px Arial';
+  ctx.fillStyle = '#e8edf5';
+  ctx.fillText('Relatório de Produção', PAD, 58);
+
+  ctx.font = '11.5px Arial';
+  ctx.fillStyle = '#566a88';
+  ctx.fillText(dateBR, PAD, 76);
+
+  ctx.strokeStyle = '#1e3050';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD, 94); ctx.lineTo(W-PAD, 94); ctx.stroke();
+
+  // --- KPIs ---
+  const kpis = [
+    { label:'CAPACIDADE', value:fmt(totalCap),  color:'#00e5ff' },
+    { label:'PRODUÇÃO',   value:fmt(totalProd), color:'#b388ff' },
+    { label:'ATINGIDO',   value:totalPct+'%',   color:totalPct>=100?'#00e676':totalPct>=70?'#ffd740':'#ff5252' },
+    { label:'NO META',    value:`${okCount}/${areaRows.filter(r=>r.cap>0).length}`, color:'#00e676' },
+  ];
+  const kW = (W - PAD*2) / 4;
+  kpis.forEach((k,i) => {
+    const kx = PAD + i*kW, ky = 102;
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    rr(kx+2, ky, kW-4, 64, 6); ctx.fill();
+    ctx.strokeStyle = '#1e3050'; ctx.lineWidth=1; ctx.stroke();
+    ctx.font='bold 8px Arial'; ctx.fillStyle='#566a88';
+    ctx.textAlign='center';
+    ctx.fillText(k.label, kx+kW/2, ky+15);
+    ctx.font='bold 17px Arial'; ctx.fillStyle=k.color;
+    ctx.fillText(k.value, kx+kW/2, ky+46);
+    ctx.textAlign='left';
+  });
+
+  // --- TABELA header ---
+  let y = HEADER_H + KPI_H + 12;
+  ctx.fillStyle = 'rgba(0,229,255,0.05)';
+  ctx.fillRect(0, y, W, TH_H);
+  ctx.font = 'bold 8px Arial'; ctx.fillStyle = '#566a88';
+  ctx.fillText('ÁREA', PAD, y+15);
+  ctx.textAlign='center';
+  ctx.fillText('CAP.',  COL_CAP,  y+15);
+  ctx.fillText('PROD.', COL_PROD, y+15);
+  ctx.fillText('%',     COL_PCT,  y+15);
+  ctx.fillText('BARRA', BAR_X + BAR_W/2, y+15);
+  ctx.textAlign='left';
+  y += TH_H;
+
+  // --- LINHAS ---
+  rows.forEach(row => {
+    if (row.type === 'group') {
+      const {r,g,b} = hex2rgb(row.color);
+      ctx.fillStyle = `rgba(${r},${g},${b},0.08)`;
+      ctx.fillRect(0, y, W, GROUP_H);
+      ctx.font='bold 9px Arial'; ctx.fillStyle=row.color;
+      ctx.fillText(row.name, PAD, y+17);
+      y += GROUP_H;
+      return;
+    }
+    // linha separadora
+    ctx.strokeStyle='rgba(30,48,80,0.7)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,y+ROW_H); ctx.lineTo(W,y+ROW_H); ctx.stroke();
+
+    const mid = y + ROW_H/2 + 5;
+
+    // ícone
+    ctx.font='12px Arial';
+    ctx.fillText(row.icon, PAD, mid);
+
+    // nome — truncar se longo
+    ctx.font='bold 11px Arial'; ctx.fillStyle='#e8edf5';
+    const maxNameW = COL_CAP - PAD - 26 - 8;
+    let nome = row.name;
+    while (nome.length > 3 && ctx.measureText(nome).width > maxNameW) nome = nome.slice(0,-1);
+    if (nome !== row.name) nome = nome.slice(0,-1) + '…';
+    ctx.fillText(nome, PAD+22, mid);
+
+    // cap
+    ctx.font='10.5px Arial'; ctx.fillStyle='#8899b4';
+    ctx.textAlign='center';
+    ctx.fillText(fmt(row.cap), COL_CAP, mid);
+
+    // prod
+    ctx.font='bold 11.5px Arial'; ctx.fillStyle='#e8edf5';
+    ctx.fillText(fmt(row.prod), COL_PROD, mid);
+
+    // %
+    const pc = row.pct >= 100 ? '#00e676' : row.pct >= 70 ? '#ffd740' : '#ff5252';
+    ctx.font='bold 11.5px Arial'; ctx.fillStyle=pc;
+    ctx.fillText(row.pct+'%', COL_PCT, mid);
+    ctx.textAlign='left';
+
+    // barra track
+    const bY = y + ROW_H/2 - 3;
+    ctx.fillStyle='rgba(255,255,255,0.07)';
+    rr(BAR_X, bY, BAR_W, 7, 3); ctx.fill();
+    // barra fill
+    const fill = Math.min(row.pct, 100) / 100;
+    if (fill > 0) {
+      ctx.fillStyle = pc;
+      rr(BAR_X, bY, BAR_W*fill, 7, 3); ctx.fill();
+    }
+
+    y += ROW_H;
+  });
+
+  // --- JUSTIFICATIVAS ---
+  if (justifCount > 0) {
+    const justifItems = areaRows.filter(r => r.pct < 100 && r.justif.trim());
+    y += 12;
+    ctx.fillStyle='#1e3050'; ctx.fillRect(0,y,W,1); y+=10;
+    ctx.font='bold 9.5px Arial'; ctx.fillStyle='#ff5252';
+    ctx.fillText('⚠️  JUSTIFICATIVAS', PAD, y+12); y+=26;
+
+    justifItems.forEach(r => {
+      ctx.fillStyle='rgba(255,82,82,0.06)';
+      rr(PAD, y, W-PAD*2, 44, 6); ctx.fill();
+      ctx.strokeStyle='rgba(255,82,82,0.18)'; ctx.lineWidth=1; ctx.stroke();
+
+      ctx.font='bold 10px Arial'; ctx.fillStyle='#ff5252';
+      ctx.fillText(r.name, PAD+8, y+14);
+
+      ctx.font='10px Arial'; ctx.fillStyle='#8899b4';
+      const mw = W - PAD*2 - 16;
+      let line='', ly=y+30;
+      r.justif.split(' ').forEach(w => {
+        const t = line+w+' ';
+        if (ctx.measureText(t).width > mw && line) {
+          ctx.fillText(line.trim(), PAD+8, ly); line=w+' '; ly+=13;
+        } else line=t;
+      });
+      ctx.fillText(line.trim(), PAD+8, ly);
+      y += 54;
+    });
+    y += 4;
+  }
+
+  // --- FOOTER ---
+  ctx.fillStyle='rgba(0,229,255,0.04)';
+  ctx.fillRect(0, y, W, FOOTER_H);
+  ctx.font='10px Arial'; ctx.fillStyle='#566a88';
+  ctx.textAlign='center';
+  ctx.fillText('Gerado por PCP Control • '+dateBR, W/2, y+FOOTER_H/2+4);
+  ctx.textAlign='left';
+
+  // --- PREVIEW: escala para caber no modal (max 460px) ---
+  const previewCanvas = document.getElementById('share-canvas');
+  const maxPreviewW = 460;
+  const displayW = Math.min(W, maxPreviewW);
+  const displayH = Math.round(H * (displayW / W));
+  previewCanvas.width  = W * DPR;
+  previewCanvas.height = H * DPR;
+  previewCanvas.style.width  = displayW + 'px';
+  previewCanvas.style.height = displayH + 'px';
+  previewCanvas.getContext('2d').drawImage(canvas, 0, 0);
+
+  document.getElementById('img-modal-overlay').style.display = 'flex';
+}
+
+function baixarImagem() {
+  const canvas = document.getElementById('hidden-canvas');
+  const dateISO = document.getElementById('dash-date')?.value || todayISO();
+  const dateBR  = isoToBR(dateISO).replace(/\//g,'-');
+  const link = document.createElement('a');
+  link.download = `pcp_${dateBR}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+function closeImgModal() {
+  document.getElementById('img-modal-overlay').style.display = 'none';
+}
+
+
+// ================================================================
+//  CONFIGURAÇÕES — capacidade padrão por área
+// ================================================================
+let configData = {};
+
+// Retorna peças/dia de uma área — usa config salva, senão usa o default do array
+function getAreaPdia(area) {
+  return configData[area.id] ?? area.pdia;
+}
+
+const CONFIG_GROUPS = [
+  { name: 'INBOUND',     color: 'var(--cyan)',   areas: INBOUND_AREAS },
+  { name: 'OUTBOUND',    color: 'var(--purple)', areas: OUTBOUND_AREAS },
+  { name: 'RED CARPET',  color: 'var(--yellow)', areas: RED_CARPET_AREAS },
+];
+
+function renderConfig() {
+  configData = DB.getConfig();
+  const body = document.getElementById('config-body');
+
+  body.innerHTML = CONFIG_GROUPS.map(g => `
+    <div class="table-card">
+      <div class="table-card-header">
+        <span class="table-card-title" style="color:${g.color}">${g.name}</span>
+        <span style="font-size:12px;color:var(--text-muted)">Peças produzidas por colaborador por dia</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Área</th>
+            <th class="center">Peças/Dia Atual</th>
+            <th class="center">Novo Valor</th>
+            <th class="center">Treinamento (60%)</th>
+            <th class="center">Capacidade c/ 10 fixos</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${g.areas.map(a => {
+            const current = getAreaPdia(a);
+            const trein   = Math.round(current * 0.6);
+            const cap10   = current * 10;
+            return `<tr>
+              <td style="font-weight:600;color:var(--text-primary)">${a.icon} ${a.name}</td>
+              <td class="center">
+                <span style="font-family:var(--font-mono);color:var(--text-muted);font-size:13px">${current.toLocaleString('pt-BR')}</span>
+              </td>
+              <td class="center">
+                <input
+                  type="number" min="1"
+                  id="cfg-${a.id}"
+                  value="${current}"
+                  oninput="updateConfigPreview('${a.id}')"
+                  style="background:var(--bg-input);border:1px solid var(--border-light);
+                    color:${g.color};padding:9px 12px;border-radius:8px;
+                    font-family:var(--font-mono);font-size:15px;font-weight:700;
+                    width:110px;text-align:center;outline:none;
+                    transition:border-color 0.15s"
+                  onfocus="this.style.borderColor='${g.color}'"
+                  onblur="this.style.borderColor='var(--border-light)'">
+              </td>
+              <td class="center">
+                <span id="cfg-trein-${a.id}" style="font-family:var(--font-mono);color:var(--green);font-weight:600">
+                  ${trein.toLocaleString('pt-BR')}
+                </span>
+              </td>
+              <td class="center">
+                <span id="cfg-cap10-${a.id}" style="font-family:var(--font-mono);color:var(--text-secondary)">
+                  ${cap10.toLocaleString('pt-BR')}
+                </span>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `).join('');
+}
+
+function updateConfigPreview(areaId) {
+  const val   = parseInt(document.getElementById(`cfg-${areaId}`)?.value) || 0;
+  const trein = Math.round(val * 0.6);
+  const cap10 = val * 10;
+  const tEl   = document.getElementById(`cfg-trein-${areaId}`);
+  const cEl   = document.getElementById(`cfg-cap10-${areaId}`);
+  if (tEl) tEl.textContent = trein.toLocaleString('pt-BR');
+  if (cEl) cEl.textContent = cap10.toLocaleString('pt-BR');
+}
+
+function saveConfig() {
+  const allAreas = [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS];
+  allAreas.forEach(a => {
+    const val = parseInt(document.getElementById(`cfg-${a.id}`)?.value);
+    if (val > 0) configData[a.id] = val;
+  });
+  DB.saveConfig(configData);
+
+  // feedback
+  const btn = event.target;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '✓ Salvo!';
+  btn.style.borderColor = 'var(--green)';
+  btn.style.color = 'var(--green)';
+  setTimeout(() => { btn.innerHTML = orig; btn.style.borderColor = ''; btn.style.color = ''; }, 1800);
+}
+
+function resetConfig() {
+  if (!confirm('Restaurar todos os valores padrão? Os valores customizados serão perdidos.')) return;
+  configData = {};
+  DB.saveConfig({});
+  renderConfig();
+}
+
+// ================================================================
+//  INIT
+// ================================================================
+productionRecords = DB.getProduction();
+dashJustif       = DB.getJustif();
+metasData        = DB.getMetas();
+configData       = DB.getConfig();
+renderCapacidade();
+renderProducao();
+</script>
+</body>
+</html>
