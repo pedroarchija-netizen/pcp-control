@@ -2697,6 +2697,20 @@ async function init() {
   }
 }
 
+// ================================================================
+//  EXPOR FUNÇÕES GLOBAIS (necessário com type="module")
+// ================================================================
+Object.assign(window, {
+  openModal, closeModal, recalcModal, saveCapacidade,
+  deleteRecord, editRecord, exportCSV, clearFilter,
+  setProdDateToday, saveProducao,
+  renderDashboard, setDashToday, saveJustif, exportDashCSV,
+  renderRanking, exportRankingCSV,
+  renderMetas, saveMetas, exportMetasCSV, recalcMetaRow,
+  gerarImagem, baixarImagem, closeImgModal,
+  renderConfig, updateConfigPreview, saveConfig, resetConfig,
+});
+
 init();
 </script>
 </body>
