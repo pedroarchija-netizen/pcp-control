@@ -1995,15 +1995,15 @@ function recalcMetaRow(el) {
     : '—';
 }
 
-function renderMetas() {
-  metasData = DB.getMetas();
+async function renderMetas() {
+  metasData = await DB.getMetas();
   const key = getMetaKey();
   const rec = metasData[key];
   if (rec?.diasUteis) document.getElementById('meta-dias-uteis').value = rec.diasUteis;
   renderMetasTable();
 
-  document.getElementById('meta-mes').onchange       = () => { metasData = DB.getMetas(); renderMetas(); };
-  document.getElementById('meta-ano').onchange       = () => { metasData = DB.getMetas(); renderMetas(); };
+  document.getElementById('meta-mes').onchange       = async () => { metasData = await DB.getMetas(); renderMetas(); };
+  document.getElementById('meta-ano').onchange       = async () => { metasData = await DB.getMetas(); renderMetas(); };
   document.getElementById('meta-dias-uteis').oninput = renderMetasTable;
 }
 
@@ -2024,12 +2024,14 @@ async function saveMetas() {
   metasData[key] = { diasUteis: dias, areas };
   await DB.saveMetas({ [key]: metasData[key] });
 
-  const btn = event.target;
-  const orig = btn.innerHTML;
-  btn.innerHTML = '✓ Salvo!';
-  btn.style.borderColor = 'var(--green)';
-  btn.style.color = 'var(--green)';
-  setTimeout(() => { btn.innerHTML = orig; btn.style.borderColor = ''; btn.style.color = ''; }, 1800);
+  const btn = document.querySelector('#page-metas .btn-primary');
+  if (btn) {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✓ Salvo!';
+    btn.style.borderColor = 'var(--green)';
+    btn.style.color = 'var(--green)';
+    setTimeout(() => { btn.innerHTML = orig; btn.style.borderColor = ''; btn.style.color = ''; }, 1800);
+  }
 }
 
 function exportMetasCSV() {
