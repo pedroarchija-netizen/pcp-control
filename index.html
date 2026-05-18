@@ -782,6 +782,10 @@ tr:hover td { background: rgba(0,229,255,0.02); }
       <span class="icon">⚙️</span>
       <span>Configurações</span>
     </button>
+    <button class="nav-btn" data-page="paradas">
+      <span class="icon">⛔</span>
+      <span>Paradas</span>
+    </button>
   </nav>
   <div class="sidebar-footer">PCP Control v1.0<br>Supabase Ready</div>
 </aside>
@@ -1096,6 +1100,95 @@ tr:hover td { background: rgba(0,229,255,0.02); }
     <div style="display:flex;flex-direction:column;gap:18px" id="config-body"></div>
   </div>
 
+  <!-- ===== PAGE: PARADAS ===== -->
+  <div id="page-paradas" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">⛔ Paradas de Produção</h1>
+        <p class="page-subtitle">Registro de ocorrências que impactaram a produção</p>
+      </div>
+      <button class="btn btn-primary" onclick="abrirModalParada()">+ Registrar parada</button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-row" style="grid-template-columns:repeat(5,1fr);margin-bottom:22px">
+      <div class="kpi-card" style="--kpi-color:var(--red)">
+        <div class="kpi-label">Paradas no Período</div>
+        <div class="kpi-value" id="par-kpi-total">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--yellow)">
+        <div class="kpi-label">Minutos Parados</div>
+        <div class="kpi-value" id="par-kpi-min">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--red)">
+        <div class="kpi-label">Peças Perdidas</div>
+        <div class="kpi-value" id="par-kpi-pecas">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--purple)">
+        <div class="kpi-label">Motivo Mais Frequente</div>
+        <div class="kpi-value" style="font-size:15px;line-height:1.3" id="par-kpi-motivo">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--orange,#ffab40)">
+        <div class="kpi-label">Área Mais Impactada</div>
+        <div class="kpi-value" style="font-size:15px;line-height:1.3" id="par-kpi-area">—</div>
+      </div>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="filter-bar" style="margin-bottom:22px">
+      <span class="filter-label">Período:</span>
+      <button class="btn btn-ghost filter-btn-par active" data-par="hoje">Hoje</button>
+      <button class="btn btn-ghost filter-btn-par" data-par="7d">7 dias</button>
+      <button class="btn btn-ghost filter-btn-par" data-par="30d">30 dias</button>
+      <button class="btn btn-ghost filter-btn-par" data-par="all">Todos</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:8px">
+        <input type="date" id="par-from">
+        <span style="color:var(--text-muted)">→</span>
+        <input type="date" id="par-to">
+      </div>
+      <button class="btn btn-ghost" onclick="exportParadasCSV()" style="margin-left:auto">⬇ CSV</button>
+    </div>
+
+    <!-- RANKING DE MOTIVOS -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
+      <div class="table-card">
+        <div class="table-card-header">
+          <span class="table-card-title">⏱ Minutos por Motivo</span>
+        </div>
+        <div id="par-rank-motivo"></div>
+      </div>
+      <div class="table-card">
+        <div class="table-card-header">
+          <span class="table-card-title">🏭 Minutos por Área</span>
+        </div>
+        <div id="par-rank-area"></div>
+      </div>
+    </div>
+
+    <!-- HISTÓRICO -->
+    <div class="table-card">
+      <div class="table-card-header">
+        <span class="table-card-title">Histórico de Paradas</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Motivo</th>
+            <th>Áreas Afetadas</th>
+            <th class="center">Início</th>
+            <th class="center">Fim</th>
+            <th class="center">Duração</th>
+            <th class="center" style="color:var(--red)">Peças Perdidas</th>
+            <th>Observação</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="par-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
 </main>
 
 <!-- ========== MODAL: REGISTRAR CAPACIDADE ========== -->
@@ -1109,7 +1202,16 @@ tr:hover td { background: rgba(0,229,255,0.02); }
   </div>
 </div>
 
-<!-- MODAL PREVIEW IMAGEM -->
+<!-- MODAL PARADA -->
+<div class="modal-overlay" id="modal-parada-overlay" style="display:none" onclick="fecharModalParada()">
+  <div class="modal" style="max-width:680px" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-parada-title">⛔ Registrar Parada</span>
+      <button class="modal-close" onclick="fecharModalParada()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-parada-body"></div>
+  </div>
+</div>
 <div class="modal-overlay" id="img-modal-overlay" style="display:none" onclick="closeImgModal()">
   <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:16px;
     width:95%;max-width:520px;max-height:92vh;display:flex;flex-direction:column;
@@ -1229,6 +1331,20 @@ const DB = {
       { onConflict: 'key' }
     );
   },
+
+  // Paradas de produção
+  getParadas: async () => {
+    const { data, error } = await supabase
+      .from('paradas').select('*').order('date', { ascending: false });
+    if (error) { console.error('getParadas:', error); return []; }
+    return data || [];
+  },
+  saveParada: async (rec) => {
+    await supabase.from('paradas').upsert(rec, { onConflict: 'id' });
+  },
+  deleteParada: async (id) => {
+    await supabase.from('paradas').delete().eq('id', id);
+  },
 };
 
 // ================================================================
@@ -1320,6 +1436,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     if (btn.dataset.page === 'ranking') renderRanking();
     if (btn.dataset.page === 'metas') renderMetas();
     if (btn.dataset.page === 'config') renderConfig();
+    if (btn.dataset.page === 'paradas') renderParadas();
   });
 });
 
@@ -2682,12 +2799,13 @@ async function init() {
   document.body.appendChild(overlay);
 
   try {
-    [capacityRecords, productionRecords, dashJustif, metasData, configData] = await Promise.all([
+    [capacityRecords, productionRecords, dashJustif, metasData, configData, paradasRecords] = await Promise.all([
       DB.getCapacity(),
       DB.getProduction(),
       DB.getJustif(),
       DB.getMetas(),
       DB.getConfig(),
+      DB.getParadas(),
     ]);
     overlay.remove();
     renderCapacidade();
@@ -2705,8 +2823,396 @@ async function init() {
 }
 
 // ================================================================
-//  EXPOR FUNÇÕES GLOBAIS (necessário com type="module")
+//  PARADAS DE PRODUÇÃO
 // ================================================================
+let paradasRecords = [];
+let parPeriod = 'hoje';
+let editingParadaId = null;
+
+const MOTIVOS_PADRAO = [
+  'Queda de energia','Falta de internet','Manutenção de equipamento',
+  'Falta de insumo','Problema no sistema','Reunião geral',
+  'Limpeza','Outro',
+];
+
+const ALL_AREAS_PARADA = [
+  { id: 'todas', name: 'Todas as áreas' },
+  ...INBOUND_AREAS.map(a => ({ id: a.id, name: a.name })),
+  ...OUTBOUND_AREAS.map(a => ({ id: a.id, name: a.name })),
+  ...RED_CARPET_AREAS.map(a => ({ id: a.id, name: a.name })),
+];
+
+// Jornada: 07:00 → 16:48 = 588 minutos
+const JORNADA_INICIO = 7 * 60;       // 420 min
+const JORNADA_FIM    = 16 * 60 + 48; // 1008 min
+const JORNADA_MIN    = JORNADA_FIM - JORNADA_INICIO; // 588 min
+
+// Converte "HH:MM" para minutos do dia
+function toMin(hhmm) {
+  if (!hhmm) return null;
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+// Calcula minutos dentro da jornada para um intervalo podendo cruzar meia-noite
+// Retorna { dia1: min, dia2: min } onde dia2 é a continuação no dia seguinte
+function calcDuracaoJornada(inicio, fim) {
+  if (!inicio || !fim) return { dia1: 0, dia2: 0 };
+
+  const iMin = toMin(inicio);
+  let   fMin = toMin(fim);
+
+  // Se fim <= início → parada cruzou meia-noite
+  const cruzouMeiaNoite = fMin <= iMin;
+
+  if (!cruzouMeiaNoite) {
+    // Parada dentro do mesmo dia
+    // Clipa dentro da jornada
+    const start = Math.max(iMin, JORNADA_INICIO);
+    const end   = Math.min(fMin, JORNADA_FIM);
+    return { dia1: Math.max(0, end - start), dia2: 0 };
+  } else {
+    // Cruzou meia-noite:
+    // Dia 1: início até 16:48
+    const start1 = Math.max(iMin, JORNADA_INICIO);
+    const end1   = JORNADA_FIM;
+    const dia1   = Math.max(0, end1 - start1);
+
+    // Dia 2: 07:00 até fim
+    const start2 = JORNADA_INICIO;
+    const end2   = Math.min(fMin, JORNADA_FIM);
+    const dia2   = Math.max(0, end2 - start2);
+
+    return { dia1, dia2 };
+  }
+}
+
+// Duração total dentro da jornada
+function calcDuracao(inicio, fim) {
+  const { dia1, dia2 } = calcDuracaoJornada(inicio, fim);
+  return dia1 + dia2;
+}
+
+// Calcula peças perdidas para uma parada, por área
+function calcPecasPerdidas(rec) {
+  const { dia1, dia2 } = calcDuracaoJornada(rec.inicio, rec.fim);
+  const areas = (rec.areas || []).filter(id => id !== 'todas');
+  const todasAreas = (rec.areas || []).includes('todas');
+  const lista = todasAreas
+    ? [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS]
+    : [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS].filter(a => areas.includes(a.id));
+
+  let total = 0;
+  lista.forEach(a => {
+    const pdia = getAreaPdia(a); // peças por dia (jornada completa)
+    const taxaMin = pdia / JORNADA_MIN; // peças por minuto
+    total += Math.round((dia1 + dia2) * taxaMin);
+  });
+  return total;
+}
+
+function fmtDuracao(min) {
+  if (!min) return '—';
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h > 0 ? `${h}h ${m}min` : `${m}min`;
+}
+
+function getParadasFiltradas() {
+  const now = new Date();
+  if (parPeriod === 'hoje') return paradasRecords.filter(r => r.date === todayBR());
+  if (parPeriod === 'custom') {
+    const from = document.getElementById('par-from')?.value;
+    const to   = document.getElementById('par-to')?.value;
+    return paradasRecords.filter(r => {
+      const [d,m,y] = r.date.split('/');
+      const iso = `${y}-${m}-${d}`;
+      return (!from || iso >= from) && (!to || iso <= to);
+    });
+  }
+  if (parPeriod === 'all') return paradasRecords;
+  const days = parPeriod === '7d' ? 7 : 30;
+  const cutoff = new Date(now.getTime() - days * 86400000);
+  return paradasRecords.filter(r => {
+    const [d,m,y] = r.date.split('/');
+    return new Date(`${y}-${m}-${d}`) >= cutoff;
+  });
+}
+
+function renderParadas() {
+  const recs = getParadasFiltradas();
+
+  // KPIs
+  const totalMin   = recs.reduce((s,r) => s + (r.duracao || 0), 0);
+  const totalPecas = recs.reduce((s,r) => s + calcPecasPerdidas(r), 0);
+  document.getElementById('par-kpi-total').textContent = recs.length || '—';
+  document.getElementById('par-kpi-min').textContent   = fmtDuracao(totalMin) || '—';
+  document.getElementById('par-kpi-pecas').textContent = totalPecas > 0 ? fmt(totalPecas) : '—';
+
+  // motivo mais frequente
+  const motivoCount = {};
+  recs.forEach(r => { motivoCount[r.motivo] = (motivoCount[r.motivo] || 0) + 1; });
+  const topMotivo = Object.entries(motivoCount).sort((a,b) => b[1]-a[1])[0];
+  document.getElementById('par-kpi-motivo').textContent = topMotivo ? topMotivo[0] : '—';
+
+  // área mais impactada
+  const areaMin = {};
+  recs.forEach(r => {
+    (r.areas || []).forEach(a => {
+      areaMin[a] = (areaMin[a] || 0) + (r.duracao || 0);
+    });
+  });
+  const topArea = Object.entries(areaMin).sort((a,b) => b[1]-a[1])[0];
+  document.getElementById('par-kpi-area').textContent = topArea
+    ? ALL_AREAS_PARADA.find(a => a.id === topArea[0])?.name || topArea[0]
+    : '—';
+
+  // ranking motivos
+  const motivoMin = {};
+  recs.forEach(r => { motivoMin[r.motivo] = (motivoMin[r.motivo] || 0) + (r.duracao || 0); });
+  const maxMotivoMin = Math.max(...Object.values(motivoMin), 1);
+  document.getElementById('par-rank-motivo').innerHTML = Object.entries(motivoMin)
+    .sort((a,b) => b[1]-a[1]).slice(0,8)
+    .map(([motivo, min]) => {
+      const pct = Math.round((min / maxMotivoMin) * 100);
+      return `<div style="padding:12px 20px;border-bottom:1px solid rgba(28,45,74,0.4)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <span style="font-size:13px;color:var(--text-primary);font-weight:600">${motivo}</span>
+          <span style="font-family:var(--font-mono);color:var(--yellow);font-size:12px;font-weight:700">${fmtDuracao(min)}</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:var(--yellow);border-radius:3px"></div>
+        </div>
+      </div>`;
+    }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted)">Sem dados</div>';
+
+  // ranking áreas
+  const maxAreaMin = Math.max(...Object.values(areaMin), 1);
+  document.getElementById('par-rank-area').innerHTML = Object.entries(areaMin)
+    .sort((a,b) => b[1]-a[1]).slice(0,8)
+    .map(([areaId, min]) => {
+      const nome = ALL_AREAS_PARADA.find(a => a.id === areaId)?.name || areaId;
+      const pct  = Math.round((min / maxAreaMin) * 100);
+      return `<div style="padding:12px 20px;border-bottom:1px solid rgba(28,45,74,0.4)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <span style="font-size:13px;color:var(--text-primary);font-weight:600">${nome}</span>
+          <span style="font-family:var(--font-mono);color:var(--red);font-size:12px;font-weight:700">${fmtDuracao(min)}</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:var(--red);border-radius:3px"></div>
+        </div>
+      </div>`;
+    }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted)">Sem dados</div>';
+
+  // tabela histórico
+  const tbody = document.getElementById('par-table-body');
+  if (!recs.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Nenhuma parada registrada</td></tr>';
+    return;
+  }
+  const today = todayBR();
+  tbody.innerHTML = recs.map(r => {
+    const areasNomes = (r.areas || [])
+      .map(id => id === 'todas' ? 'Todas as áreas' : ALL_AREAS_PARADA.find(a => a.id === id)?.name || id)
+      .join(', ');
+    const pecas = calcPecasPerdidas(r);
+    const { dia2 } = calcDuracaoJornada(r.inicio, r.fim);
+    const cruzou   = dia2 > 0;
+    return `<tr>
+      <td>${r.date}${r.date === today ? '<span class="badge-hoje">hoje</span>' : ''}
+        ${cruzou ? `<div style="font-size:10px;color:var(--yellow);margin-top:2px">↪ continua ${fmtDuracao(dia2)} no dia seguinte</div>` : ''}
+      </td>
+      <td style="color:var(--yellow);font-weight:600">${r.motivo}</td>
+      <td style="color:var(--text-secondary);font-size:12px;max-width:180px">${areasNomes}</td>
+      <td class="center" style="font-family:var(--font-mono)">${r.inicio || '—'}</td>
+      <td class="center" style="font-family:var(--font-mono)">${r.fim || '—'}</td>
+      <td class="center"><span style="font-family:var(--font-mono);color:var(--yellow);font-weight:700">${fmtDuracao(r.duracao)}</span></td>
+      <td class="center"><span style="font-family:var(--font-mono);color:var(--red);font-weight:700">${pecas > 0 ? fmt(pecas) : '—'}</span></td>
+      <td style="color:var(--text-muted);font-size:12px">${r.obs || '—'}</td>
+      <td>
+        <div class="td-actions">
+          <button class="btn-icon edit" onclick="editarParada(${r.id})" title="Editar">✏️</button>
+          <button class="btn-icon delete" onclick="deletarParada(${r.id})" title="Excluir">🗑️</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // listeners de filtro
+  document.querySelectorAll('.filter-btn-par').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.filter-btn-par').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      parPeriod = btn.dataset.par;
+      renderParadas();
+    };
+  });
+  ['par-from','par-to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.onchange = () => { parPeriod = 'custom'; document.querySelectorAll('.filter-btn-par').forEach(b => b.classList.remove('active')); renderParadas(); };
+  });
+}
+
+function abrirModalParada(id = null) {
+  editingParadaId = id;
+  const rec = id ? paradasRecords.find(r => r.id === id) : null;
+  document.getElementById('modal-parada-title').textContent = rec ? '✏️ Editar Parada' : '⛔ Registrar Parada';
+
+  const areasOptions = ALL_AREAS_PARADA.map(a =>
+    `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer">
+      <input type="checkbox" value="${a.id}" ${rec?.areas?.includes(a.id) ? 'checked' : ''}
+        style="width:15px;height:15px;accent-color:var(--red);cursor:pointer">
+      <span style="font-size:13px;color:var(--text-primary)">${a.name}</span>
+    </label>`
+  ).join('');
+
+  const motivosOptions = MOTIVOS_PADRAO.map(m =>
+    `<option value="${m}" ${rec?.motivo === m ? 'selected' : ''}>${m}</option>`
+  ).join('');
+
+  document.getElementById('modal-parada-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div>
+        <label class="filter-label" style="display:block;margin-bottom:6px">Data <span style="color:var(--red)">*</span></label>
+        <input type="date" id="par-data" value="${rec ? brToISO(rec.date) : todayISO()}"
+          style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+            padding:10px 14px;border-radius:8px;font-size:14px;width:100%;outline:none">
+      </div>
+      <div>
+        <label class="filter-label" style="display:block;margin-bottom:6px">Motivo <span style="color:var(--red)">*</span></label>
+        <select id="par-motivo"
+          style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+            padding:10px 14px;border-radius:8px;font-size:14px;width:100%;outline:none">
+          ${motivosOptions}
+        </select>
+      </div>
+      <div>
+        <label class="filter-label" style="display:block;margin-bottom:6px">Horário Início</label>
+        <input type="time" id="par-inicio" value="${rec?.inicio || ''}"
+          style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--cyan);
+            padding:10px 14px;border-radius:8px;font-size:14px;width:100%;outline:none;font-family:var(--font-mono)"
+          oninput="atualizarDuracao()">
+      </div>
+      <div>
+        <label class="filter-label" style="display:block;margin-bottom:6px">Horário Fim</label>
+        <input type="time" id="par-fim" value="${rec?.fim || ''}"
+          style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--cyan);
+            padding:10px 14px;border-radius:8px;font-size:14px;width:100%;outline:none;font-family:var(--font-mono)"
+          oninput="atualizarDuracao()">
+      </div>
+    </div>
+
+    <div style="padding:12px 16px;background:var(--bg-deepest);border:1px solid var(--border);border-radius:8px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
+      <span style="color:var(--text-muted);font-size:13px">Duração calculada:</span>
+      <span id="par-duracao-display" style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--red)">—</span>
+    </div>
+
+    <div style="margin-bottom:20px">
+      <label class="filter-label" style="display:block;margin-bottom:10px">Áreas Afetadas <span style="color:var(--red)">*</span></label>
+      <div style="background:var(--bg-input);border:1px solid var(--border-light);border-radius:8px;padding:12px 16px;
+        max-height:200px;overflow-y:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:2px">
+        ${areasOptions}
+      </div>
+    </div>
+
+    <div style="margin-bottom:24px">
+      <label class="filter-label" style="display:block;margin-bottom:6px">Observação</label>
+      <textarea id="par-obs" rows="2" placeholder="Detalhes adicionais..."
+        style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+          padding:10px 14px;border-radius:8px;font-size:13px;width:100%;outline:none;
+          resize:none;font-family:var(--font-display)">${rec?.obs || ''}</textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="salvarParada()">💾 Salvar parada</button>
+      <button class="btn-cancel" onclick="fecharModalParada()">Cancelar</button>
+    </div>
+  `;
+
+  if (rec?.inicio && rec?.fim) atualizarDuracao();
+  document.getElementById('modal-parada-overlay').style.display = 'flex';
+}
+
+function fecharModalParada() {
+  document.getElementById('modal-parada-overlay').style.display = 'none';
+  editingParadaId = null;
+}
+
+function atualizarDuracao() {
+  const inicio = document.getElementById('par-inicio')?.value;
+  const fim    = document.getElementById('par-fim')?.value;
+  const { dia1, dia2 } = calcDuracaoJornada(inicio, fim);
+  const total  = dia1 + dia2;
+  const el     = document.getElementById('par-duracao-display');
+  if (!el) return;
+  if (total === 0) { el.innerHTML = '—'; return; }
+  let html = `<span style="color:var(--red)">${fmtDuracao(total)}</span>`;
+  if (dia2 > 0) {
+    html += `<span style="font-size:11px;color:var(--yellow);margin-left:10px">
+      (${fmtDuracao(dia1)} hoje + ${fmtDuracao(dia2)} dia seguinte)
+    </span>`;
+  }
+  el.innerHTML = html;
+}
+
+async function salvarParada() {
+  const dateISO = document.getElementById('par-data')?.value;
+  const motivo  = document.getElementById('par-motivo')?.value;
+  if (!dateISO || !motivo) { alert('Preencha data e motivo'); return; }
+
+  const inicio = document.getElementById('par-inicio')?.value || '';
+  const fim    = document.getElementById('par-fim')?.value    || '';
+  const obs    = document.getElementById('par-obs')?.value    || '';
+  const areas  = [...document.querySelectorAll('#modal-parada-body input[type=checkbox]:checked')]
+    .map(cb => cb.value);
+
+  if (!areas.length) { alert('Selecione ao menos uma área afetada'); return; }
+
+  const duracao = calcDuracao(inicio, fim);
+  const record  = {
+    id:      editingParadaId || Date.now(),
+    date:    isoToBR(dateISO),
+    motivo, inicio, fim, duracao, obs,
+    areas,
+  };
+
+  await DB.saveParada(record);
+
+  const idx = paradasRecords.findIndex(r => r.id === record.id);
+  if (idx >= 0) paradasRecords[idx] = record;
+  else paradasRecords.unshift(record);
+
+  fecharModalParada();
+  renderParadas();
+}
+
+function editarParada(id) {
+  abrirModalParada(id);
+}
+
+async function deletarParada(id) {
+  if (!confirm('Excluir esta parada?')) return;
+  await DB.deleteParada(id);
+  paradasRecords = paradasRecords.filter(r => r.id !== id);
+  renderParadas();
+}
+
+function exportParadasCSV() {
+  const recs = getParadasFiltradas();
+  let csv = 'Data,Motivo,Áreas Afetadas,Início,Fim,Duração (min),Peças Perdidas,Observação\n';
+  recs.forEach(r => {
+    const areas = (r.areas || []).map(id => ALL_AREAS_PARADA.find(a => a.id === id)?.name || id).join(' | ');
+    const pecas = calcPecasPerdidas(r);
+    csv += `${r.date},"${r.motivo}","${areas}",${r.inicio||''},${r.fim||''},${r.duracao||0},${pecas},"${r.obs||''}"\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `paradas_${todayBR().replace(/\//g,'-')}.csv`;
+  link.click();
+}
+
+
 Object.assign(window, {
   openModal, closeModal, recalcModal, saveCapacidade,
   deleteRecord, editRecord, exportCSV, clearFilter,
@@ -2716,6 +3222,8 @@ Object.assign(window, {
   renderMetas, saveMetas, exportMetasCSV, recalcMetaRow,
   gerarImagem, baixarImagem, closeImgModal,
   renderConfig, updateConfigPreview, saveConfig, resetConfig,
+  abrirModalParada, fecharModalParada, atualizarDuracao, salvarParada,
+  editarParada, deletarParada, exportParadasCSV, renderParadas,
 });
 
 init();
