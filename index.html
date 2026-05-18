@@ -1249,9 +1249,10 @@ const INBOUND_AREAS = [
   { id: 'armazenagem', name: 'Armazenagem', icon: '🏷️', pdia: 1261 },
 ];
 const OUTBOUND_AREAS = [
-  { id: 'picking', name: 'Picking', icon: '🎾', pdia: 485 },
+  { id: 'picking',    name: 'Picking',    icon: '🎾', pdia: 485 },
   { id: 'conferencia', name: 'Conferência', icon: '📑', pdia: 350 },
-  { id: 'expedicao', name: 'Expedição', icon: '🚚', pdia: 400 },
+  { id: 'expedicao',  name: 'Expedição',  icon: '🚚', pdia: 400 },
+  { id: 'devolucao',  name: 'Devolução',  icon: '↩️', pdia: 300 },
 ];
 const RED_CARPET_AREAS = [
   { id: 'cadastro_red',   name: 'Cadastro Red',   icon: '📋', pdia: 189 },
@@ -1272,9 +1273,10 @@ const PRODUCAO_AREAS = [
   { id: 'p_check_in', name: 'CHECK IN', icon: '☑️', group: 'INBOUND' },
   { id: 'p_armazenagem', name: 'ARMAZENAGEM', icon: '🏷️', group: 'INBOUND' },
   // OUTBOUND
-  { id: 'p_picking', name: 'PICKING', icon: '🎾', group: 'OUTBOUND' },
+  { id: 'p_picking',    name: 'PICKING',    icon: '🎾', group: 'OUTBOUND' },
   { id: 'p_conferencia', name: 'CONFERÊNCIA', icon: '📑', group: 'OUTBOUND' },
-  { id: 'p_expedicao', name: 'EXPEDIÇÃO', icon: '🚚', group: 'OUTBOUND' },
+  { id: 'p_expedicao',  name: 'EXPEDIÇÃO',  icon: '🚚', group: 'OUTBOUND' },
+  { id: 'p_devolucao',  name: 'DEVOLUÇÃO',  icon: '↩️', group: 'OUTBOUND' },
   // RED CARPET
   { id: 'p_cadastro_red',   name: 'CADASTRO RED',   icon: '📋', group: 'RED CARPET' },
   { id: 'p_fotografia_red', name: 'FOTOGRAFIA RED',  icon: '📸', group: 'RED CARPET' },
@@ -1701,6 +1703,7 @@ const CAP_TO_PROD = {
   picking:       'p_picking',
   conferencia:   'p_conferencia',
   expedicao:     'p_expedicao',
+  devolucao:     'p_devolucao',
   cadastro_red:  'p_cadastro_red',
   fotografia_red: 'p_fotografia_red',
   expedicao_red:  'p_expedicao_red',
