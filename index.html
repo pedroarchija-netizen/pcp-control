@@ -370,22 +370,6 @@ tr:hover td { background: var(--bg-hover); }
 .btn-justif-save:hover { background: #b52626; }
 .dash-empty { text-align: center; color: var(--text-muted); padding: 48px 20px; font-size: 14px; }
 
-/* ========== RANKING ========== */
-.rank-card { display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid var(--border-light); transition: background 0.1s; }
-.rank-card:hover { background: var(--bg-hover); }
-.rank-pos { font-family: var(--font-mono); font-size: 15px; font-weight: 800; width: 28px; text-align: center; flex-shrink: 0; }
-.rank-pos.gold   { color: #b8860b; }
-.rank-pos.silver { color: #607d8b; }
-.rank-pos.bronze { color: #a0522d; }
-.rank-pos.other  { color: var(--text-muted); }
-.rank-area-name { font-size: 13.5px; font-weight: 700; color: var(--text-primary); flex: 1; }
-.rank-area-group { font-size: 10px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.5px; text-transform: uppercase; margin-top: 2px; }
-.rank-pct-big { font-family: var(--font-mono); font-size: 20px; font-weight: 800; text-align: right; min-width: 60px; }
-.rank-mini-bar { width: 100%; height: 5px; background: var(--border-light); border-radius: 3px; overflow: hidden; margin-top: 5px; }
-.rank-mini-fill { height: 100%; border-radius: 3px; }
-.consistency-bar { display: flex; gap: 3px; align-items: center; justify-content: center; }
-.day-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
-
 /* ========== HIDDEN PAGES ========== */
 .page { display: none; }
 .page.active { display: block; }
@@ -428,10 +412,6 @@ tr:hover td { background: var(--bg-hover); }
     <button class="nav-btn" data-page="dashboard">
       <span class="icon">📈</span>
       <span>Dashboard</span>
-    </button>
-    <button class="nav-btn" data-page="ranking">
-      <span class="icon">🏆</span>
-      <span>Ranking de Áreas</span>
     </button>
     <button class="nav-btn" data-page="metas">
       <span class="icon">🎯</span>
@@ -590,88 +570,6 @@ tr:hover td { background: var(--bg-hover); }
     </div>
   </div>
 
-  <!-- ===== PAGE: RANKING ===== -->
-  <div id="page-ranking" class="page">
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">🏆 Ranking de Áreas</h1>
-        <p class="page-subtitle">Desempenho acumulado por área no período selecionado</p>
-      </div>
-      <button class="btn btn-ghost" onclick="exportRankingCSV()">⬇ CSV</button>
-    </div>
-
-    <!-- FILTROS -->
-    <div class="filter-bar">
-      <span class="filter-label">Período:</span>
-      <button class="btn btn-ghost filter-btn-rank active" data-rank="7d">7 dias</button>
-      <button class="btn btn-ghost filter-btn-rank" data-rank="15d">15 dias</button>
-      <button class="btn btn-ghost filter-btn-rank" data-rank="30d">30 dias</button>
-      <button class="btn btn-ghost filter-btn-rank" data-rank="custom">Personalizado</button>
-      <span id="rank-custom-dates" style="display:none;align-items:center;gap:8px">
-        <input type="date" id="rank-from">
-        <span style="color:var(--text-muted)">→</span>
-        <input type="date" id="rank-to">
-      </span>
-    </div>
-
-    <!-- KPIs resumo -->
-    <div class="kpi-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px">
-      <div class="kpi-card" style="--kpi-color:var(--cyan)">
-        <div class="kpi-label">Dias Analisados</div>
-        <div class="kpi-value" id="rank-kpi-dias">—</div>
-      </div>
-      <div class="kpi-card" style="--kpi-color:var(--green)">
-        <div class="kpi-label">Melhor Área</div>
-        <div class="kpi-value" style="font-size:16px;line-height:1.3" id="rank-kpi-best">—</div>
-      </div>
-      <div class="kpi-card" style="--kpi-color:var(--red)">
-        <div class="kpi-label">Área com mais Gaps</div>
-        <div class="kpi-value" style="font-size:16px;line-height:1.3" id="rank-kpi-worst">—</div>
-      </div>
-      <div class="kpi-card" style="--kpi-color:var(--yellow)">
-        <div class="kpi-label">Média Geral do Período</div>
-        <div class="kpi-value" id="rank-kpi-avg">—</div>
-      </div>
-    </div>
-
-    <!-- DUAS COLUNAS: melhores e piores -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px">
-      <div class="table-card">
-        <div class="table-card-header">
-          <span class="table-card-title">🥇 Melhores Desempenhos</span>
-        </div>
-        <div id="rank-top-body"></div>
-      </div>
-      <div class="table-card">
-        <div class="table-card-header">
-          <span class="table-card-title">🔻 Mais Abaixo da Meta</span>
-        </div>
-        <div id="rank-bot-body"></div>
-      </div>
-    </div>
-
-    <!-- TABELA COMPLETA -->
-    <div class="table-card">
-      <div class="table-card-header">
-        <span class="table-card-title">Todas as Áreas — Ranking Completo</span>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th style="width:40px">#</th>
-            <th>Área</th>
-            <th class="center">Dias c/ dados</th>
-            <th class="center">Dias na meta</th>
-            <th class="center">Taxa de meta</th>
-            <th class="center">% Médio</th>
-            <th class="center" style="width:180px">Consistência</th>
-          </tr>
-        </thead>
-        <tbody id="rank-full-body"></tbody>
-      </table>
-    </div>
-  </div>
-
   <!-- ===== PAGE: METAS MENSAIS ===== -->
   <div id="page-metas" class="page">
     <div class="page-header">
@@ -688,13 +586,13 @@ tr:hover td { background: var(--bg-hover); }
       <select id="meta-mes" style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);padding:8px 12px;border-radius:8px;font-family:var(--font-display);font-size:13px;outline:none">
         <option value="1">Janeiro</option><option value="2">Fevereiro</option>
         <option value="3">Março</option><option value="4">Abril</option>
-        <option value="5" selected>Maio</option><option value="6">Junho</option>
+        <option value="5">Maio</option><option value="6">Junho</option>
         <option value="7">Julho</option><option value="8">Agosto</option>
         <option value="9">Setembro</option><option value="10">Outubro</option>
         <option value="11">Novembro</option><option value="12">Dezembro</option>
       </select>
       <select id="meta-ano" style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);padding:8px 12px;border-radius:8px;font-family:var(--font-display);font-size:13px;outline:none">
-        <option value="2025">2025</option><option value="2026" selected>2026</option><option value="2027">2027</option>
+        <option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option>
       </select>
       <div style="display:flex;align-items:center;gap:8px;margin-left:12px;padding-left:12px;border-left:1px solid var(--border)">
         <span class="filter-label">Dias úteis:</span>
@@ -1100,7 +998,6 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     document.getElementById('page-' + btn.dataset.page).classList.add('active');
     if (btn.dataset.page === 'producao') renderProducao();
     if (btn.dataset.page === 'dashboard') renderDashboard();
-    if (btn.dataset.page === 'ranking') renderRanking();
     if (btn.dataset.page === 'metas') renderMetas();
     if (btn.dataset.page === 'config') renderConfig();
     if (btn.dataset.page === 'paradas') renderParadas();
@@ -1355,6 +1252,15 @@ async function saveCapacidade() {
   if (!dateISO) { alert('Selecione uma data'); return; }
   const dateBR = isoToBR(dateISO);
 
+  // Verifica duplicata por data (se não estiver editando)
+  if (!editingId) {
+    const existing = capacityRecords.find(r => r.date === dateBR);
+    if (existing) {
+      if (!confirm(`Já existe um registro para ${dateBR}. Deseja sobrescrever?`)) return;
+      editingId = existing.id;
+    }
+  }
+
   const areas = {};
   ALL_CAP_AREAS.forEach(a => {
     const fixos = Number(document.querySelector(`input[data-area="${a.id}"][data-field="fixos"]`)?.value) || 0;
@@ -1383,15 +1289,20 @@ async function saveCapacidade() {
     areas,
   };
 
-  if (editingId) {
-    capacityRecords = capacityRecords.map(r => r.id === editingId ? record : r);
-  } else {
-    capacityRecords.unshift(record);
-  }
+  try {
+    if (editingId) {
+      capacityRecords = capacityRecords.map(r => r.id === editingId ? record : r);
+    } else {
+      capacityRecords.unshift(record);
+    }
 
-  await DB.saveCapacity([record]);
-  closeModal();
-  renderCapacidade();
+    await DB.saveCapacity([record]);
+    closeModal();
+    renderCapacidade();
+  } catch(e) {
+    console.error('Erro ao salvar capacidade:', e);
+    alert('Erro ao salvar. Verifique sua conexão.');
+  }
 }
 
 // ================================================================
@@ -1456,18 +1367,32 @@ async function saveProducao() {
   const idx = productionRecords.findIndex(r => r.date === dateBR);
   const record = { id: idx >= 0 ? productionRecords[idx].id : Date.now(), date: dateBR, areas };
 
-  if (idx >= 0) {
-    productionRecords[idx] = record;
-  } else {
-    productionRecords.unshift(record);
+  try {
+    if (idx >= 0) {
+      productionRecords[idx] = record;
+    } else {
+      productionRecords.unshift(record);
+    }
+
+    await DB.saveProduction([record]);
+
+    PRODUCAO_AREAS.forEach(a => {
+      const tag = document.querySelector(`[data-saved="${a.id}"]`);
+      if (tag) tag.style.visibility = 'visible';
+    });
+
+    // Feedback visual no botão
+    const btn = document.querySelector('.btn-save-day');
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = '✓ Salvo!';
+      btn.style.background = 'var(--green)';
+      setTimeout(() => { btn.innerHTML = orig; btn.style.background = ''; }, 1800);
+    }
+  } catch(e) {
+    console.error('Erro ao salvar produção:', e);
+    alert('Erro ao salvar. Verifique sua conexão.');
   }
-
-  await DB.saveProduction([record]);
-
-  PRODUCAO_AREAS.forEach(a => {
-    const tag = document.querySelector(`[data-saved="${a.id}"]`);
-    if (tag) tag.style.visibility = 'visible';
-  });
 }
 
 // ================================================================
@@ -1720,18 +1645,29 @@ function exportDashCSV() {
   const dateBR = isoToBR(document.getElementById('dash-date').value || todayISO());
   const capRec = capacityRecords.find(r => r.date === dateBR);
   const prodRec = productionRecords.find(r => r.date === dateBR);
-  let csv = 'Data,Área,Capacidade,Produção Real,% Atingido,Justificativa\n';
+
+  // obter meta do mês
+  const [dd, mm, yy] = dateBR.split('/');
+  const metaKey = `${yy}-${parseInt(mm)}`;
+  const metaRec = metasData[metaKey] || {};
+  const diasUteis = metaRec.diasUteis || 20;
+
+  let csv = 'Data,Área,HC Plan,HC Real,Meta/Dia,Capacidade,Produção Real,% Atingido,Justificativa\n';
   DASH_GROUPS.forEach(g => {
     g.areas.forEach(a => {
-      let cap = 0;
+      let cap = 0, hcReal = 0;
       if (capRec?.areas?.[a.id]) {
         const d = capRec.areas[a.id];
         cap = (d.fixos * d.pecasDia) + (d.treinamento * d.pecasTrein);
+        hcReal = (d.fixos || 0) + (d.treinamento || 0);
       }
+      const hcPlan = metaRec?.areas?.[a.id]?.hc || 0;
+      const metaMensal = metaRec?.areas?.[a.id]?.meta || 0;
+      const metaDia = diasUteis > 0 && metaMensal > 0 ? Math.ceil(metaMensal / diasUteis) : 0;
       const prod = prodRec?.areas?.[CAP_TO_PROD[a.id]] || 0;
       const pct = cap > 0 ? Math.round((prod / cap) * 100) : 0;
       const justif = (dashJustif[`${dateBR}_${a.id}`] || '').replace(/"/g, '""');
-      csv += `${dateBR},"${a.name}",${cap},${prod},${pct}%,"${justif}"\n`;
+      csv += `${dateBR},"${a.name}",${hcPlan},${hcReal},${metaDia},${cap},${prod},${pct}%,"${justif}"\n`;
     });
   });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1740,206 +1676,6 @@ function exportDashCSV() {
   link.download = `dashboard_${dateBR.replace(/\//g,'-')}.csv`;
   link.click();
 }
-
-// ================================================================
-//  RANKING DE ÁREAS
-// ================================================================
-let rankPeriod = '7d';
-
-const ALL_RANK_AREAS = [
-  ...INBOUND_AREAS.map(a => ({ ...a, group: 'INBOUND',     groupColor: 'var(--cyan)'   })),
-  ...OUTBOUND_AREAS.map(a => ({ ...a, group: 'OUTBOUND',   groupColor: 'var(--purple)' })),
-  ...RED_CARPET_AREAS.map(a => ({ ...a, group: 'RED CARPET', groupColor: 'var(--yellow)' })),
-];
-
-function getRankDateRange() {
-  const now = new Date();
-  if (rankPeriod === 'custom') {
-    const from = document.getElementById('rank-from')?.value;
-    const to   = document.getElementById('rank-to')?.value;
-    return { from: from || null, to: to || null };
-  }
-  const days = rankPeriod === '7d' ? 7 : rankPeriod === '15d' ? 15 : 30;
-  const from = new Date(now.getTime() - days * 86400000).toISOString().split('T')[0];
-  return { from, to: now.toISOString().split('T')[0] };
-}
-
-function recInRange(dateBR, from, to) {
-  const [d,m,y] = dateBR.split('/');
-  const iso = `${y}-${m}-${d}`;
-  return (!from || iso >= from) && (!to || iso <= to);
-}
-
-function buildRankData() {
-  const { from, to } = getRankDateRange();
-  const capInRange  = capacityRecords.filter(r => recInRange(r.date, from, to));
-  const prodInRange = productionRecords.filter(r => recInRange(r.date, from, to));
-
-  return ALL_RANK_AREAS.map(area => {
-    const days = [];
-    capInRange.forEach(capRec => {
-      const d = capRec.areas?.[area.id];
-      if (!d) return;
-      const cap = (d.fixos * d.pecasDia) + (d.treinamento * d.pecasTrein);
-      if (cap === 0) return;
-      const prodRec = prodInRange.find(p => p.date === capRec.date);
-      const prod = prodRec?.areas?.[CAP_TO_PROD[area.id]] || 0;
-      const pct  = Math.round((prod / cap) * 100);
-      days.push({ date: capRec.date, cap, prod, pct, hit: pct >= 100 });
-    });
-
-    const daysWithData = days.length;
-    const daysHit      = days.filter(d => d.hit).length;
-    const taxaMeta     = daysWithData > 0 ? Math.round((daysHit / daysWithData) * 100) : 0;
-    const avgPct       = daysWithData > 0 ? Math.round(days.reduce((s,d) => s + d.pct, 0) / daysWithData) : 0;
-
-    return { ...area, days, daysWithData, daysHit, taxaMeta, avgPct };
-  });
-}
-
-function posClass(i) {
-  if (i === 0) return 'gold';
-  if (i === 1) return 'silver';
-  if (i === 2) return 'bronze';
-  return 'other';
-}
-
-function renderRankCard(item, pos) {
-  const barW     = Math.min(item.avgPct, 100);
-  const barColor = item.avgPct >= 100 ? 'var(--green)' : item.avgPct >= 70 ? 'var(--yellow)' : 'var(--red)';
-  const pctColor = item.avgPct >= 100 ? 'var(--green)' : item.avgPct >= 70 ? 'var(--yellow)' : 'var(--red)';
-  return `
-    <div class="rank-card">
-      <span class="rank-pos ${posClass(pos)}">${pos + 1}</span>
-      <div style="flex:1;min-width:0">
-        <div class="rank-area-name">${item.icon} ${item.name}</div>
-        <div class="rank-area-group" style="color:${item.groupColor}">${item.group}</div>
-        <div class="rank-mini-bar">
-          <div style="height:100%;border-radius:3px;width:${barW}%;background:${barColor}"></div>
-        </div>
-      </div>
-      <div>
-        <div class="rank-pct-big" style="color:${pctColor}">${item.avgPct}%</div>
-        <div style="font-size:10.5px;color:var(--text-muted);text-align:right;margin-top:2px">${item.daysHit}/${item.daysWithData} dias</div>
-      </div>
-    </div>`;
-}
-
-function renderRanking() {
-  const data = buildRankData();
-  const { from, to } = getRankDateRange();
-
-  // filter only areas with data
-  const withData = data.filter(a => a.daysWithData > 0);
-  const sorted   = [...withData].sort((a,b) => b.avgPct - a.avgPct);
-  const sortedAsc = [...withData].sort((a,b) => a.avgPct - b.avgPct);
-
-  // how many distinct days in range
-  const allDates = [...new Set([
-    ...capacityRecords.filter(r => recInRange(r.date, from, to)).map(r => r.date),
-    ...productionRecords.filter(r => recInRange(r.date, from, to)).map(r => r.date),
-  ])];
-
-  // KPIs
-  document.getElementById('rank-kpi-dias').textContent = allDates.length;
-  document.getElementById('rank-kpi-best').textContent  = sorted[0]  ? `${sorted[0].icon} ${sorted[0].name}` : '—';
-  document.getElementById('rank-kpi-worst').textContent = sortedAsc[0] ? `${sortedAsc[0].icon} ${sortedAsc[0].name}` : '—';
-  const globalAvg = withData.length ? Math.round(withData.reduce((s,a) => s + a.avgPct, 0) / withData.length) : 0;
-  const globalCls = pctClass(globalAvg);
-  const avgEl = document.getElementById('rank-kpi-avg');
-  avgEl.textContent = globalAvg + '%';
-  avgEl.style.color = `var(--${globalCls.bar.replace('bar-','') === 'good' ? 'green' : globalCls.bar.replace('bar-','') === 'mid' ? 'yellow' : 'red'})`;
-
-  // top 5 / bottom 5
-  const top5 = sorted.slice(0, 5);
-  const bot5 = sortedAsc.slice(0, 5);
-  document.getElementById('rank-top-body').innerHTML = top5.length
-    ? top5.map((a,i) => renderRankCard(a, i)).join('')
-    : '<div style="padding:32px;text-align:center;color:var(--text-muted)">Sem dados no período</div>';
-  document.getElementById('rank-bot-body').innerHTML = bot5.length
-    ? bot5.map((a,i) => renderRankCard(a, i)).join('')
-    : '<div style="padding:32px;text-align:center;color:var(--text-muted)">Sem dados no período</div>';
-
-  // full table
-  const allSorted = [...withData].sort((a,b) => b.avgPct - a.avgPct);
-  const noData    = data.filter(a => a.daysWithData === 0);
-
-  const fullRows = allSorted.map((a, i) => {
-    const cls = pctClass(a.avgPct);
-    // consistency dots: last N days sorted by date
-    const daysSorted = [...a.days].sort((x,y) => {
-      const toISO = br => { const [d,m,y]=br.split('/'); return `${y}-${m}-${d}`; };
-      return toISO(x.date) > toISO(y.date) ? 1 : -1;
-    });
-    const dots = daysSorted.slice(-14).map(d => {
-      const c = d.hit ? 'var(--green)' : d.pct >= 70 ? 'var(--yellow)' : 'var(--red)';
-      return `<span class="day-dot" style="background:${c}" title="${d.date}: ${d.pct}%"></span>`;
-    }).join('');
-
-    return `<tr>
-      <td style="color:var(--text-muted);font-weight:700;font-size:13px">${i+1}</td>
-      <td>
-        <span style="font-weight:700;color:var(--text-primary)">${a.icon} ${a.name}</span>
-        <span style="font-size:10px;color:${a.groupColor};margin-left:6px;font-weight:600">${a.group}</span>
-      </td>
-      <td class="center" style="color:var(--text-secondary)">${a.daysWithData}</td>
-      <td class="center" style="color:var(--text-secondary)">${a.daysHit}</td>
-      <td class="center">
-        <span style="font-weight:700;font-size:14px" class="${cls.pct}">${a.taxaMeta}%</span>
-      </td>
-      <td class="center">
-        <span style="font-family:var(--font-mono);font-weight:800;font-size:15px" class="${cls.pct}">${a.avgPct}%</span>
-      </td>
-      <td class="center">
-        <div class="consistency-bar">${dots || '<span style="color:var(--text-muted);font-size:11px">sem histórico</span>'}</div>
-      </td>
-    </tr>`;
-  });
-
-  // áreas sem dados
-  const noDataRows = noData.map(a => `
-    <tr>
-      <td style="color:var(--text-muted)">—</td>
-      <td><span style="color:var(--text-muted)">${a.icon} ${a.name}</span>
-        <span style="font-size:10px;color:${a.groupColor};margin-left:6px">${a.group}</span>
-      </td>
-      <td class="center" colspan="5" style="color:var(--text-muted);font-size:12px">Sem dados no período</td>
-    </tr>`).join('');
-
-  document.getElementById('rank-full-body').innerHTML = fullRows.join('') + noDataRows
-    || '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">Sem dados no período selecionado</td></tr>';
-}
-
-function exportRankingCSV() {
-  const data = buildRankData().filter(a => a.daysWithData > 0)
-    .sort((a,b) => b.avgPct - a.avgPct);
-  let csv = 'Posição,Área,Grupo,Dias com dados,Dias na meta,Taxa de meta (%),% Médio Atingido\n';
-  data.forEach((a,i) => {
-    csv += `${i+1},"${a.name}",${a.group},${a.daysWithData},${a.daysHit},${a.taxaMeta},${a.avgPct}\n`;
-  });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `ranking_areas_${rankPeriod}.csv`;
-  link.click();
-}
-
-// filtros do ranking
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.filter-btn-rank').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-btn-rank').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      rankPeriod = btn.dataset.rank;
-      const customDates = document.getElementById('rank-custom-dates');
-      customDates.style.display = rankPeriod === 'custom' ? 'flex' : 'none';
-      renderRanking();
-    });
-  });
-  ['rank-from','rank-to'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', renderRanking);
-  });
-});
 
 // ================================================================
 //  METAS MENSAIS
@@ -2068,14 +1804,28 @@ function recalcMetaRow(el) {
 
 async function renderMetas() {
   metasData = await DB.getMetas();
+
+  // Setar mês/ano atuais se ainda não tiver valor salvo
+  const mesEl = document.getElementById('meta-mes');
+  const anoEl = document.getElementById('meta-ano');
+  if (!mesEl._initialized) {
+    mesEl.value = String(new Date().getMonth() + 1);
+    anoEl.value = String(new Date().getFullYear());
+    mesEl._initialized = true;
+  }
+
   const key = getMetaKey();
   const rec = metasData[key];
   if (rec?.diasUteis) document.getElementById('meta-dias-uteis').value = rec.diasUteis;
   renderMetasTable();
 
-  document.getElementById('meta-mes').onchange       = async () => { metasData = await DB.getMetas(); renderMetas(); };
-  document.getElementById('meta-ano').onchange       = async () => { metasData = await DB.getMetas(); renderMetas(); };
-  document.getElementById('meta-dias-uteis').oninput = renderMetasTable;
+  // Listeners: só attach uma vez
+  if (!mesEl._listenersAttached) {
+    mesEl._listenersAttached = true;
+    document.getElementById('meta-mes').onchange       = () => renderMetas();
+    document.getElementById('meta-ano').onchange       = () => renderMetas();
+    document.getElementById('meta-dias-uteis').oninput = renderMetasTable;
+  }
 }
 
 async function saveMetas() {
@@ -3044,14 +2794,19 @@ async function salvarParada() {
     areas,
   };
 
-  await DB.saveParada(record);
+  try {
+    await DB.saveParada(record);
 
-  const idx = paradasRecords.findIndex(r => r.id === record.id);
-  if (idx >= 0) paradasRecords[idx] = record;
-  else paradasRecords.unshift(record);
+    const idx = paradasRecords.findIndex(r => r.id === record.id);
+    if (idx >= 0) paradasRecords[idx] = record;
+    else paradasRecords.unshift(record);
 
-  fecharModalParada();
-  renderParadas();
+    fecharModalParada();
+    renderParadas();
+  } catch(e) {
+    console.error('Erro ao salvar parada:', e);
+    alert('Erro ao salvar parada. Verifique sua conexão.');
+  }
 }
 
 function editarParada(id) {
@@ -3086,7 +2841,6 @@ Object.assign(window, {
   deleteRecord, editRecord, exportCSV, clearFilter,
   setProdDateToday, saveProducao,
   renderDashboard, setDashToday, saveJustif, exportDashCSV,
-  renderRanking, exportRankingCSV,
   renderMetas, saveMetas, exportMetasCSV, recalcMetaRow,
   gerarImagem, baixarImagem, closeImgModal,
   renderConfig, updateConfigPreview, saveConfig, resetConfig,
