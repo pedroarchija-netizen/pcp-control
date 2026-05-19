@@ -1506,8 +1506,8 @@ function pctClass(pct) {
   return               { pct: 'pct-low',  bar: 'bar-low'  };
 }
 
-function renderDashboard() {
-  dashJustif = DB.getJustif();
+async function renderDashboard() {
+  dashJustif = await DB.getJustif();
 
   const dateInput = document.getElementById('dash-date');
   if (!dateInput.value) dateInput.value = todayISO();
@@ -2365,8 +2365,8 @@ const CONFIG_GROUPS = [
   { name: 'RED CARPET',  color: 'var(--yellow)', areas: RED_CARPET_AREAS },
 ];
 
-function renderConfig() {
-  configData = DB.getConfig();
+async function renderConfig() {
+  configData = await DB.getConfig();
   const body = document.getElementById('config-body');
 
   body.innerHTML = CONFIG_GROUPS.map(g => `
