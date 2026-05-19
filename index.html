@@ -1571,24 +1571,83 @@ async function renderDashboard() {
       <th class="center">Produção Real</th>
       <th class="center">% Atingido</th>
       <th class="center">Barra</th>
+      <th style="min-width:220px">Justificativa</th>
     </tr></thead><tbody>`;
 
   let lastGroup = null;
-  allAreaRows.forEach(({ area, group, cap, prod, pct }) => {
+  let groupCap = 0, groupProd = 0;
+
+  const flushSubtotal = (group) => {
+    const groupPct = groupCap > 0 ? Math.round((groupProd / groupCap) * 100) : 0;
+    const subColor = groupPct >= 100 ? 'var(--green)' : groupPct >= 70 ? 'var(--yellow)' : 'var(--red)';
+    const subBarW = Math.min(groupPct, 100);
+    html += `<tr style="border-top:2px solid var(--border-light);background:var(--bg-deepest)">
+      <td style="font-weight:800;font-size:12px;color:${group.color};padding:10px 20px">
+        SUBTOTAL ${group.name}
+      </td>
+      <td class="center" style="font-weight:800;color:var(--text-primary)">${fmt(groupCap)}</td>
+      <td class="center" style="font-weight:800;color:var(--text-primary)">${fmt(groupProd)}</td>
+      <td class="center"><span style="font-weight:800;font-size:13.5px;color:${subColor}">${groupPct}%</span></td>
+      <td class="center">
+        <span class="bar-track">
+          <span style="display:block;height:100%;border-radius:4px;width:${subBarW}%;background:${subColor};transition:width 0.4s ease"></span>
+        </span>
+      </td>
+      <td></td>
+    </tr>`;
+  };
+
+  allAreaRows.forEach(({ area, group, cap, prod, pct }, idx) => {
     if (group.name !== lastGroup) {
+      // flush subtotal do grupo anterior
+      if (lastGroup !== null) {
+        const prevGroup = DASH_GROUPS.find(g => g.name === lastGroup);
+        flushSubtotal(prevGroup);
+      }
       lastGroup = group.name;
-      html += `<tr><td colspan="5" style="padding:0">
+      groupCap = 0; groupProd = 0;
+      html += `<tr><td colspan="6" style="padding:0">
         <div class="dash-group-header" style="background:${group.color}18;color:${group.color}">
           <span>${group.name}</span>
         </div></td></tr>`;
     }
+
+    groupCap += cap;
+    groupProd += prod;
 
     const cls = pctClass(pct);
     const barColor = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--yellow)' : 'var(--red)';
     const barW = Math.min(pct, 100);
     const justifKey = `${dateBR}_${area.id}`;
     const justifVal = dashJustif[justifKey] || '';
-    const showJustif = pct < 100;
+    const needJustif = pct < 100;
+    const saved = justifVal.trim().length > 0;
+
+    let justifCell = '';
+    if (needJustif) {
+      justifCell = `<td style="vertical-align:middle;padding:6px 10px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="text" id="justif-${area.id}" value="${justifVal.replace(/"/g, '&quot;')}"
+            placeholder="Motivo..."
+            style="flex:1;background:var(--bg-input);border:1px solid ${saved ? 'var(--green)' : 'var(--border-light)'};
+              color:var(--text-primary);padding:7px 10px;border-radius:6px;font-family:var(--font-display);
+              font-size:12px;outline:none;transition:border-color 0.15s"
+            onfocus="this.style.borderColor='var(--red)'"
+            onblur="this.style.borderColor='${saved ? 'var(--green)' : 'var(--border-light)'}'"
+            onkeydown="if(event.key==='Enter'){saveJustif('${dateBR}','${area.id}');this.blur()}">
+          <button onclick="saveJustif('${dateBR}','${area.id}')"
+            style="background:var(--red);border:none;color:#fff;padding:6px 10px;border-radius:6px;
+              font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:var(--font-display);
+              transition:background 0.15s"
+            onmouseover="this.style.background='#b52626'"
+            onmouseout="this.style.background='var(--red)'"
+          >💾</button>
+          ${saved ? '<span style="color:var(--green);font-size:11px;font-weight:600">✓</span>' : ''}
+        </div>
+      </td>`;
+    } else {
+      justifCell = `<td style="text-align:center;color:var(--green);font-size:12px;font-weight:600">✔ Meta</td>`;
+    }
 
     html += `<tr style="cursor:default">
       <td><strong style="color:var(--text-primary);font-size:13px">${area.icon} ${area.name}</strong>
@@ -1602,31 +1661,15 @@ async function renderDashboard() {
           <span style="display:block;height:100%;border-radius:4px;width:${barW}%;background:${barColor};transition:width 0.4s ease"></span>
         </span>
       </td>
+      ${justifCell}
     </tr>`;
-
-    if (showJustif) {
-      const saved = justifVal.trim().length > 0;
-      html += `<tr class="justif-row">
-        <td colspan="5" class="justif-cell">
-          <div class="justif-wrap">
-            <span class="justif-icon">⚠️</span>
-            <div style="flex:1">
-              <div class="justif-label">Justificativa</div>
-              <textarea class="justif-input"
-                id="justif-${area.id}"
-                placeholder="Descreva o motivo pelo qual a área não atingiu a capacidade..."
-                rows="2"
-              >${justifVal}</textarea>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-              <button class="btn-justif-save" onclick="saveJustif('${dateBR}','${area.id}')">Salvar</button>
-              ${saved ? `<span class="justif-saved">✓ salvo</span>` : ''}
-            </div>
-          </div>
-        </td>
-      </tr>`;
-    }
   });
+
+  // flush subtotal do último grupo
+  if (lastGroup !== null) {
+    const lastGrp = DASH_GROUPS.find(g => g.name === lastGroup);
+    flushSubtotal(lastGrp);
+  }
 
   html += '</tbody></table>';
   body.innerHTML = html;
