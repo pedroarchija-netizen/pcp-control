@@ -2142,58 +2142,75 @@ function gerarImagem() {
     return;
   }
 
+  // obter meta do mês
+  const [dd, mm, yy] = dateBR.split('/');
+  const metaKey = `${yy}-${parseInt(mm)}`;
+  const metaRec = metasData[metaKey] || {};
+  const diasUteis = metaRec.diasUteis || 20;
+
   // ---- montar dados das áreas ----
-  const rows = [];
   const GROUPS_IMG = [
     { name: 'INBOUND',    color: '#0099cc', areas: INBOUND_AREAS },
     { name: 'OUTBOUND',   color: '#6e40c9', areas: OUTBOUND_AREAS },
     { name: 'RED CARPET', color: '#c47f00', areas: RED_CARPET_AREAS },
   ];
 
+  const groups = []; // { name, color, areas: [...] }
+  let totalCap = 0, totalProd = 0, totalHcPlan = 0, totalHcReal = 0, totalMetaDia = 0;
+
   GROUPS_IMG.forEach(g => {
-    rows.push({ type: 'group', name: g.name, color: g.color });
+    const gAreas = [];
     g.areas.forEach(a => {
-      let cap = 0;
+      let cap = 0, hcReal = 0;
       if (capRec?.areas?.[a.id]) {
         const d = capRec.areas[a.id];
         cap = (d.fixos * d.pecasDia) + (d.treinamento * d.pecasTrein);
+        hcReal = (d.fixos || 0) + (d.treinamento || 0);
       }
+      const hcPlan = metaRec?.areas?.[a.id]?.hc || 0;
+      const metaMensal = metaRec?.areas?.[a.id]?.meta || 0;
+      const metaDia = diasUteis > 0 && metaMensal > 0 ? Math.ceil(metaMensal / diasUteis) : 0;
       const prod = prodRec?.areas?.[CAP_TO_PROD[a.id]] || 0;
       const pct  = cap > 0 ? Math.round((prod / cap) * 100) : (prod > 0 ? 999 : 0);
       const justifKey = `${dateBR}_${a.id}`;
-      const justif    = dashJustif[justifKey] || '';
-      rows.push({ type: 'area', icon: a.icon, name: a.name, cap, prod, pct, justif, groupColor: g.color });
+      const justif = dashJustif[justifKey] || '';
+      totalCap += cap; totalProd += prod;
+      totalHcPlan += hcPlan; totalHcReal += hcReal; totalMetaDia += metaDia;
+      gAreas.push({ icon: a.icon, name: a.name, cap, prod, pct, hcPlan, hcReal, metaDia, justif });
     });
+    groups.push({ name: g.name, color: g.color, areas: gAreas });
   });
 
-  // ---- calcular totais ----
-  const areaRows = rows.filter(r => r.type === 'area');
-  const totalCap  = areaRows.reduce((s,r) => s + r.cap,  0);
-  const totalProd = areaRows.reduce((s,r) => s + r.prod, 0);
-  const totalPct  = totalCap > 0 ? Math.round((totalProd / totalCap) * 100) : 0;
-  const okCount   = areaRows.filter(r => r.pct >= 100).length;
-  const nokCount  = areaRows.filter(r => r.pct < 100 && r.cap > 0).length;
+  const allAreas = groups.flatMap(g => g.areas);
+  const totalPct = totalCap > 0 ? Math.round((totalProd / totalCap) * 100) : 0;
+  const okCount  = allAreas.filter(r => r.pct >= 100).length;
+  const justifItems = allAreas.filter(r => r.pct < 100 && r.justif.trim());
 
-  // ---- dimensões lógicas (canvas interno em alta res) ----
-  const W        = 560;   // largura lógica
-  const PAD      = 28;    // padding lateral
-  const ROW_H    = 46;
-  const GROUP_H  = 26;
-  const HEADER_H = 120;
-  const KPI_H    = 84;
-  const TH_H     = 22;
-  const FOOTER_H = 44;
-  const justifCount = areaRows.filter(r => r.pct < 100 && r.justif.trim()).length;
-  const JUSTIF_H    = justifCount > 0 ? 28 + justifCount * 54 + 16 : 0;
-  const tableH   = rows.reduce((s,r) => s + (r.type === 'group' ? GROUP_H : ROW_H), 0);
-  const H        = HEADER_H + KPI_H + 12 + TH_H + tableH + JUSTIF_H + FOOTER_H + 16;
+  // ---- dimensões ----
+  const W        = 720;
+  const PAD      = 24;
+  const ROW_H    = 36;
+  const GROUP_H  = 24;
+  const SUB_H    = 36;
+  const HEADER_H = 100;
+  const KPI_H    = 74;
+  const TH_H     = 24;
+  const FOOTER_H = 36;
+  const JUSTIF_H = justifItems.length > 0 ? 28 + justifItems.length * 50 + 12 : 0;
+  const rowCount = allAreas.length;
+  const groupCount = groups.length;
+  const tableH   = rowCount * ROW_H + groupCount * GROUP_H + groupCount * SUB_H;
+  const H        = HEADER_H + KPI_H + 8 + TH_H + tableH + JUSTIF_H + FOOTER_H + 12;
 
-  // colunas — mais espaço entre % e barra
-  const COL_CAP  = W - 230;   // cap  (centro)
-  const COL_PROD = W - 160;   // prod (centro)
-  const COL_PCT  = W - 96;    // %    (centro)
-  const BAR_X    = W - PAD - 44;  // início da barra (44px de distância do %)
-  const BAR_W    = 40;             // largura da barra
+  // colunas
+  const COL_HC_P = 195;
+  const COL_HC_R = 245;
+  const COL_META = 310;
+  const COL_CAP  = 395;
+  const COL_PROD = 480;
+  const COL_PCT  = 555;
+  const BAR_X    = 595;
+  const BAR_W    = 100;
 
   const DPR    = 2;
   const canvas = document.getElementById('hidden-canvas');
@@ -2202,7 +2219,6 @@ function gerarImagem() {
   const ctx = canvas.getContext('2d');
   ctx.scale(DPR, DPR);
 
-  // helpers
   const hex2rgb = h => ({ r:parseInt(h.slice(1,3),16), g:parseInt(h.slice(3,5),16), b:parseInt(h.slice(5,7),16) });
   const rr = (x,y,w,h,r) => {
     if (w <= 0 || h <= 0) return;
@@ -2216,174 +2232,206 @@ function gerarImagem() {
     ctx.closePath();
   };
 
-  // fundo claro
+  // fundo
   ctx.fillStyle = '#f0f4ff';
   ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#dde3f0'; ctx.lineWidth = 1;
+  rr(0.5, 0.5, W-1, H-1, 14); ctx.stroke();
 
-  // borda
-  ctx.strokeStyle = '#dde3f0';
-  ctx.lineWidth = 1;
-  rr(0.5, 0.5, W-1, H-1, 14);
-  ctx.stroke();
-
-  // gradiente topo
+  // header
   const grad = ctx.createLinearGradient(0,0,W,0);
   grad.addColorStop(0, 'rgba(0,153,204,0.08)');
   grad.addColorStop(1, 'rgba(110,64,201,0.05)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, HEADER_H);
-
-  // card branco interno
   ctx.fillStyle = '#ffffff';
   rr(0, 0, W, HEADER_H, 14); ctx.fill();
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, HEADER_H);
 
-  // --- HEADER ---
-  ctx.font = 'bold 11px Arial';
-  ctx.fillStyle = '#0099cc';
-  ctx.fillText('⚙️  Controle PCP', PAD, 30);
+  ctx.font = 'bold 11px Arial'; ctx.fillStyle = '#0099cc';
+  ctx.fillText('⚙️  Controle PCP', PAD, 26);
+  ctx.font = 'bold 18px Arial'; ctx.fillStyle = '#0f1b35';
+  ctx.fillText('Relatório de Produção', PAD, 50);
+  ctx.font = '11px Arial'; ctx.fillStyle = '#8895b0';
+  ctx.fillText(dateBR, PAD, 68);
+  ctx.strokeStyle = '#dde3f0'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD, 82); ctx.lineTo(W-PAD, 82); ctx.stroke();
 
-  ctx.font = 'bold 20px Arial';
-  ctx.fillStyle = '#0f1b35';
-  ctx.fillText('Relatório de Produção', PAD, 58);
-
-  ctx.font = '11.5px Arial';
-  ctx.fillStyle = '#8895b0';
-  ctx.fillText(dateBR, PAD, 76);
-
-  ctx.strokeStyle = '#dde3f0';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(PAD, 94); ctx.lineTo(W-PAD, 94); ctx.stroke();
-
-  // --- KPIs ---
+  // KPIs
   const kpis = [
     { label:'CAPACIDADE', value:fmt(totalCap),  color:'#0099cc' },
     { label:'PRODUÇÃO',   value:fmt(totalProd), color:'#6e40c9' },
     { label:'ATINGIDO',   value:totalPct+'%',   color:totalPct>=100?'#00a854':totalPct>=70?'#c47f00':'#d63031' },
-    { label:'NO META',    value:`${okCount}/${areaRows.filter(r=>r.cap>0).length}`, color:'#00a854' },
+    { label:'NO META',    value:`${okCount}/${allAreas.filter(r=>r.cap>0).length}`, color:'#00a854' },
+    { label:'HC PLAN',    value:String(totalHcPlan), color:'#4a5878' },
+    { label:'HC REAL',    value:String(totalHcReal), color:totalHcReal>=totalHcPlan?'#00a854':'#d63031' },
   ];
-  const kW = (W - PAD*2) / 4;
+  const kW = (W - PAD*2) / kpis.length;
   kpis.forEach((k,i) => {
-    const kx = PAD + i*kW, ky = 102;
+    const kx = PAD + i*kW, ky = HEADER_H - 10;
     ctx.fillStyle = '#ffffff';
-    rr(kx+2, ky, kW-4, 64, 6); ctx.fill();
+    rr(kx+2, ky, kW-4, 56, 6); ctx.fill();
     ctx.strokeStyle = '#dde3f0'; ctx.lineWidth=1; ctx.stroke();
-    ctx.font='bold 8px Arial'; ctx.fillStyle='#8895b0';
+    ctx.font='bold 7px Arial'; ctx.fillStyle='#8895b0';
     ctx.textAlign='center';
-    ctx.fillText(k.label, kx+kW/2, ky+15);
-    ctx.font='bold 17px Arial'; ctx.fillStyle=k.color;
-    ctx.fillText(k.value, kx+kW/2, ky+46);
+    ctx.fillText(k.label, kx+kW/2, ky+14);
+    ctx.font='bold 15px Arial'; ctx.fillStyle=k.color;
+    ctx.fillText(k.value, kx+kW/2, ky+40);
     ctx.textAlign='left';
   });
 
-  // --- TABELA header ---
-  let y = HEADER_H + KPI_H + 12;
+  // tabela header
+  let y = HEADER_H + KPI_H + 8;
   ctx.fillStyle = 'rgba(0,153,204,0.06)';
   ctx.fillRect(0, y, W, TH_H);
   ctx.font = 'bold 8px Arial'; ctx.fillStyle = '#8895b0';
-  ctx.fillText('ÁREA', PAD, y+15);
+  ctx.fillText('ÁREA', PAD, y+16);
   ctx.textAlign='center';
-  ctx.fillText('CAP.',  COL_CAP,  y+15);
-  ctx.fillText('PROD.', COL_PROD, y+15);
-  ctx.fillText('%',     COL_PCT,  y+15);
-  ctx.fillText('BARRA', BAR_X + BAR_W/2, y+15);
+  ctx.fillText('HC PLAN', COL_HC_P, y+16);
+  ctx.fillText('HC REAL', COL_HC_R, y+16);
+  ctx.fillText('META/DIA', COL_META, y+16);
+  ctx.fillText('CAP.',  COL_CAP,  y+16);
+  ctx.fillText('PROD.', COL_PROD, y+16);
+  ctx.fillText('%',     COL_PCT,  y+16);
+  ctx.fillText('BARRA', BAR_X + BAR_W/2, y+16);
   ctx.textAlign='left';
   y += TH_H;
 
-  // --- LINHAS ---
-  rows.forEach(row => {
-    if (row.type === 'group') {
-      const {r,g,b} = hex2rgb(row.color);
-      ctx.fillStyle = `rgba(${r},${g},${b},0.08)`;
-      ctx.fillRect(0, y, W, GROUP_H);
-      ctx.font='bold 9px Arial'; ctx.fillStyle=row.color;
-      ctx.fillText(row.name, PAD, y+17);
-      y += GROUP_H;
-      return;
-    }
-    // fundo branco alternado
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, y, W, ROW_H);
-    // linha separadora
-    ctx.strokeStyle='#e8ecf8'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(0,y+ROW_H); ctx.lineTo(W,y+ROW_H); ctx.stroke();
+  // linhas
+  groups.forEach(g => {
+    // group header
+    const {r:gr,g:gg,b:gb} = hex2rgb(g.color);
+    ctx.fillStyle = `rgba(${gr},${gg},${gb},0.08)`;
+    ctx.fillRect(0, y, W, GROUP_H);
+    ctx.font='bold 9px Arial'; ctx.fillStyle=g.color;
+    ctx.fillText(g.name, PAD, y+16);
+    y += GROUP_H;
 
-    const mid = y + ROW_H/2 + 5;
+    let gCap=0, gProd=0, gHcP=0, gHcR=0, gMeta=0;
 
-    // ícone
-    ctx.font='12px Arial';
-    ctx.fillText(row.icon, PAD, mid);
+    g.areas.forEach(row => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, y, W, ROW_H);
+      ctx.strokeStyle='#e8ecf8'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(0,y+ROW_H); ctx.lineTo(W,y+ROW_H); ctx.stroke();
 
-    // nome — truncar se longo
-    ctx.font='bold 11px Arial'; ctx.fillStyle='#0f1b35';
-    const maxNameW = COL_CAP - PAD - 26 - 8;
-    let nome = row.name;
-    while (nome.length > 3 && ctx.measureText(nome).width > maxNameW) nome = nome.slice(0,-1);
-    if (nome !== row.name) nome = nome.slice(0,-1) + '…';
-    ctx.fillText(nome, PAD+22, mid);
+      const mid = y + ROW_H/2 + 4;
 
-    // cap
-    ctx.font='10.5px Arial'; ctx.fillStyle='#4a5878';
+      // icon + nome
+      ctx.font='11px Arial'; ctx.fillText(row.icon, PAD, mid);
+      ctx.font='bold 10px Arial'; ctx.fillStyle='#0f1b35';
+      const maxNameW = COL_HC_P - PAD - 26 - 10;
+      let nome = row.name;
+      while (nome.length > 3 && ctx.measureText(nome).width > maxNameW) nome = nome.slice(0,-1);
+      if (nome !== row.name) nome = nome.slice(0,-1) + '…';
+      ctx.fillText(nome, PAD+20, mid);
+
+      ctx.textAlign='center';
+
+      // HC Plan
+      ctx.font='10px Arial'; ctx.fillStyle='#4a5878';
+      ctx.fillText(row.hcPlan || '—', COL_HC_P, mid);
+
+      // HC Real
+      const hcColor = row.hcPlan > 0 ? (row.hcReal >= row.hcPlan ? '#00a854' : '#d63031') : '#0f1b35';
+      ctx.font='bold 10px Arial'; ctx.fillStyle=hcColor;
+      ctx.fillText(row.hcReal || '—', COL_HC_R, mid);
+
+      // Meta/Dia
+      ctx.font='bold 10px Arial'; ctx.fillStyle='#6e40c9';
+      ctx.fillText(row.metaDia ? fmt(row.metaDia) : '—', COL_META, mid);
+
+      // Cap
+      ctx.font='10px Arial'; ctx.fillStyle='#4a5878';
+      ctx.fillText(fmt(row.cap), COL_CAP, mid);
+
+      // Prod
+      ctx.font='bold 10px Arial'; ctx.fillStyle='#0f1b35';
+      ctx.fillText(fmt(row.prod), COL_PROD, mid);
+
+      // %
+      const pc = row.pct >= 100 ? '#00a854' : row.pct >= 70 ? '#c47f00' : '#d63031';
+      ctx.font='bold 11px Arial'; ctx.fillStyle=pc;
+      ctx.fillText(row.pct+'%', COL_PCT, mid);
+
+      ctx.textAlign='left';
+
+      // barra
+      const bY = y + ROW_H/2 - 3;
+      ctx.fillStyle='#e8ecf8';
+      rr(BAR_X, bY, BAR_W, 7, 3); ctx.fill();
+      const fill = Math.min(row.pct, 100) / 100;
+      if (fill > 0) { ctx.fillStyle = pc; rr(BAR_X, bY, BAR_W*fill, 7, 3); ctx.fill(); }
+
+      gCap+=row.cap; gProd+=row.prod; gHcP+=row.hcPlan; gHcR+=row.hcReal; gMeta+=row.metaDia;
+      y += ROW_H;
+    });
+
+    // subtotal
+    const gPct = gCap > 0 ? Math.round((gProd / gCap) * 100) : 0;
+    const subPc = gPct >= 100 ? '#00a854' : gPct >= 70 ? '#c47f00' : '#d63031';
+    const subHcColor = gHcR >= gHcP ? '#00a854' : '#d63031';
+    ctx.fillStyle = 'rgba(0,0,0,0.03)';
+    ctx.fillRect(0, y, W, SUB_H);
+    ctx.strokeStyle='#dde3f0'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,y+SUB_H); ctx.lineTo(W,y+SUB_H); ctx.stroke();
+
+    const smid = y + SUB_H/2 + 4;
+    ctx.font='bold 9px Arial'; ctx.fillStyle=g.color;
+    ctx.fillText(`SUBTOTAL ${g.name}`, PAD, smid);
+
     ctx.textAlign='center';
-    ctx.fillText(fmt(row.cap), COL_CAP, mid);
-
-    // prod
-    ctx.font='bold 11.5px Arial'; ctx.fillStyle='#0f1b35';
-    ctx.fillText(fmt(row.prod), COL_PROD, mid);
-
-    // %
-    const pc = row.pct >= 100 ? '#00a854' : row.pct >= 70 ? '#c47f00' : '#d63031';
-    ctx.font='bold 11.5px Arial'; ctx.fillStyle=pc;
-    ctx.fillText(row.pct+'%', COL_PCT, mid);
+    ctx.font='bold 10px Arial'; ctx.fillStyle='#4a5878';
+    ctx.fillText(gHcP || '—', COL_HC_P, smid);
+    ctx.fillStyle=subHcColor;
+    ctx.fillText(gHcR || '—', COL_HC_R, smid);
+    ctx.fillStyle='#6e40c9';
+    ctx.fillText(gMeta ? fmt(gMeta) : '—', COL_META, smid);
+    ctx.fillStyle='#0f1b35';
+    ctx.fillText(fmt(gCap), COL_CAP, smid);
+    ctx.fillText(fmt(gProd), COL_PROD, smid);
+    ctx.font='bold 11px Arial'; ctx.fillStyle=subPc;
+    ctx.fillText(gPct+'%', COL_PCT, smid);
     ctx.textAlign='left';
 
-    // barra track
-    const bY = y + ROW_H/2 - 3;
+    const bY2 = y + SUB_H/2 - 3;
     ctx.fillStyle='#e8ecf8';
-    rr(BAR_X, bY, BAR_W, 7, 3); ctx.fill();
-    // barra fill
-    const fill = Math.min(row.pct, 100) / 100;
-    if (fill > 0) {
-      ctx.fillStyle = pc;
-      rr(BAR_X, bY, BAR_W*fill, 7, 3); ctx.fill();
-    }
+    rr(BAR_X, bY2, BAR_W, 7, 3); ctx.fill();
+    const sf = Math.min(gPct, 100) / 100;
+    if (sf > 0) { ctx.fillStyle = subPc; rr(BAR_X, bY2, BAR_W*sf, 7, 3); ctx.fill(); }
 
-    y += ROW_H;
+    y += SUB_H;
   });
 
-  // --- JUSTIFICATIVAS ---
-  if (justifCount > 0) {
-    const justifItems = areaRows.filter(r => r.pct < 100 && r.justif.trim());
-    y += 12;
-    ctx.fillStyle='#dde3f0'; ctx.fillRect(0,y,W,1); y+=10;
-    ctx.font='bold 9.5px Arial'; ctx.fillStyle='#d63031';
-    ctx.fillText('⚠️  JUSTIFICATIVAS', PAD, y+12); y+=26;
+  // justificativas
+  if (justifItems.length > 0) {
+    y += 10;
+    ctx.fillStyle='#dde3f0'; ctx.fillRect(0,y,W,1); y+=8;
+    ctx.font='bold 9px Arial'; ctx.fillStyle='#d63031';
+    ctx.fillText('⚠️  JUSTIFICATIVAS', PAD, y+12); y+=24;
 
     justifItems.forEach(r => {
       ctx.fillStyle='rgba(214,48,49,0.05)';
-      rr(PAD, y, W-PAD*2, 44, 6); ctx.fill();
+      rr(PAD, y, W-PAD*2, 40, 6); ctx.fill();
       ctx.strokeStyle='rgba(214,48,49,0.18)'; ctx.lineWidth=1; ctx.stroke();
-
-      ctx.font='bold 10px Arial'; ctx.fillStyle='#d63031';
+      ctx.font='bold 9px Arial'; ctx.fillStyle='#d63031';
       ctx.fillText(r.name, PAD+8, y+14);
-
-      ctx.font='10px Arial'; ctx.fillStyle='#4a5878';
+      ctx.font='9px Arial'; ctx.fillStyle='#4a5878';
       const mw = W - PAD*2 - 16;
-      let line='', ly=y+30;
+      let line='', ly=y+28;
       r.justif.split(' ').forEach(w => {
         const t = line+w+' ';
         if (ctx.measureText(t).width > mw && line) {
-          ctx.fillText(line.trim(), PAD+8, ly); line=w+' '; ly+=13;
+          ctx.fillText(line.trim(), PAD+8, ly); line=w+' '; ly+=12;
         } else line=t;
       });
       ctx.fillText(line.trim(), PAD+8, ly);
-      y += 54;
+      y += 50;
     });
-    y += 4;
+    y += 2;
   }
 
-  // --- FOOTER ---
+  // footer
   ctx.fillStyle='rgba(0,153,204,0.05)';
   ctx.fillRect(0, y, W, FOOTER_H);
   ctx.font='10px Arial'; ctx.fillStyle='#8895b0';
@@ -2391,9 +2439,9 @@ function gerarImagem() {
   ctx.fillText('Gerado por Controle PCP • '+dateBR, W/2, y+FOOTER_H/2+4);
   ctx.textAlign='left';
 
-  // --- PREVIEW: escala para caber no modal (max 460px) ---
+  // preview
   const previewCanvas = document.getElementById('share-canvas');
-  const maxPreviewW = 460;
+  const maxPreviewW = 520;
   const displayW = Math.min(W, maxPreviewW);
   const displayH = Math.round(H * (displayW / W));
   previewCanvas.width  = W * DPR;
