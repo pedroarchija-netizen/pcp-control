@@ -411,7 +411,7 @@ tr:hover td { background: var(--bg-hover); }
     </button>
     <button class="nav-btn" data-page="dashboard">
       <span class="icon">📈</span>
-      <span>Dashboard</span>
+      <span>Dashboard Capacidade</span>
     </button>
     <button class="nav-btn" data-page="metas">
       <span class="icon">🎯</span>
@@ -522,7 +522,7 @@ tr:hover td { background: var(--bg-hover); }
   <div id="page-dashboard" class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">📈 Dashboard</h1>
+        <h1 class="page-title">📈 Dashboard Capacidade</h1>
         <p class="page-subtitle">Comparativo de capacidade × produção realizada por área</p>
       </div>
       <button class="btn btn-primary" onclick="gerarImagem()">📸 Gerar imagem</button>
@@ -578,6 +578,7 @@ tr:hover td { background: var(--bg-hover); }
         <p class="page-subtitle">Planejamento de headcount por área com base na meta de peças</p>
       </div>
       <button class="btn btn-ghost" onclick="exportMetasCSV()">⬇ CSV</button>
+      <button class="btn btn-primary" onclick="gerarImagemMetas()">📸 Gerar imagem</button>
     </div>
 
     <!-- SELETOR MÊS/ANO + DIAS ÚTEIS -->
@@ -799,6 +800,28 @@ tr:hover td { background: var(--bg-hover); }
 
 <!-- canvas oculto para geração -->
 <canvas id="hidden-canvas" style="display:none"></canvas>
+<canvas id="hidden-canvas-metas" style="display:none"></canvas>
+
+<!-- MODAL IMAGEM METAS -->
+<div class="modal-overlay" id="img-modal-metas-overlay" style="display:none" onclick="closeImgModalMetas()">
+  <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:16px;
+    width:95%;max-width:520px;max-height:92vh;display:flex;flex-direction:column;
+    box-shadow:0 24px 80px rgba(0,0,0,0.6)" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid var(--border)">
+      <span style="font-size:17px;font-weight:700">📸 Preview — Metas Mensais</span>
+      <button class="modal-close" onclick="closeImgModalMetas()">✕</button>
+    </div>
+    <div style="padding:20px;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:16px">
+      <canvas id="share-canvas-metas" style="width:100%;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4)"></canvas>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:13px" onclick="baixarImagemMetas()">
+        ⬇ Baixar imagem
+      </button>
+      <p style="font-size:12px;color:var(--text-muted);text-align:center">
+        Baixe e compartilhe direto no grupo do trabalho
+      </p>
+    </div>
+  </div>
+</div>
 
 <script type="module">
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
@@ -1882,7 +1905,7 @@ function exportMetasCSV() {
 // ================================================================
 function gerarImagem() {
   const dateISO = document.getElementById('dash-date')?.value;
-  if (!dateISO) { alert('Selecione uma data no Dashboard primeiro.'); return; }
+  if (!dateISO) { alert('Selecione uma data no Dashboard Capacidade primeiro.'); return; }
   const dateBR  = isoToBR(dateISO);
   const capRec  = capacityRecords.find(r => r.date === dateBR);
   const prodRec = productionRecords.find(r => r.date === dateBR);
@@ -2215,6 +2238,241 @@ function baixarImagem() {
 
 function closeImgModal() {
   document.getElementById('img-modal-overlay').style.display = 'none';
+}
+
+// ================================================================
+//  GERAR IMAGEM — METAS MENSAIS
+// ================================================================
+function gerarImagemMetas() {
+  const mes = document.getElementById('meta-mes')?.value;
+  const ano = document.getElementById('meta-ano')?.value;
+  const key = getMetaKey();
+  const rec = metasData[key] || {};
+  const dias = parseInt(document.getElementById('meta-dias-uteis')?.value) || 20;
+
+  const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const titulo = `${MESES[parseInt(mes)]} ${ano}`;
+
+  const GROUPS_IMG = [
+    { name: 'INBOUND',    color: '#0099cc', areas: INBOUND_AREAS },
+    { name: 'OUTBOUND',   color: '#6e40c9', areas: OUTBOUND_AREAS },
+    { name: 'RED CARPET', color: '#c47f00', areas: RED_CARPET_AREAS },
+  ];
+
+  const groups = [];
+  let totalMeta = 0, totalHc = 0, totalMetaDia = 0;
+
+  GROUPS_IMG.forEach(g => {
+    const gAreas = [];
+    let gMeta = 0, gHc = 0, gMetaDia = 0;
+    g.areas.forEach(a => {
+      const saved = rec.areas?.[a.id] || {};
+      const meta = saved.meta || 0;
+      const hc = saved.hc || 0;
+      const metaDia = dias > 0 && meta > 0 ? Math.ceil(meta / dias) : 0;
+      gMeta += meta; gHc += hc; gMetaDia += metaDia;
+      totalMeta += meta; totalHc += hc; totalMetaDia += metaDia;
+      gAreas.push({ icon: a.icon, name: a.name, meta, hc, metaDia });
+    });
+    groups.push({ name: g.name, color: g.color, areas: gAreas, totalMeta: gMeta, totalHc: gHc, totalMetaDia: gMetaDia });
+  });
+
+  // dimensões
+  const W = 580;
+  const PAD = 24;
+  const ROW_H = 36;
+  const GROUP_H = 24;
+  const SUB_H = 36;
+  const HEADER_H = 100;
+  const KPI_H = 74;
+  const TH_H = 24;
+  const FOOTER_H = 36;
+  const allAreas = groups.flatMap(g => g.areas);
+  const rowCount = allAreas.length;
+  const groupCount = groups.length;
+  const tableH = rowCount * ROW_H + groupCount * GROUP_H + groupCount * SUB_H;
+  const H = HEADER_H + KPI_H + 8 + TH_H + tableH + FOOTER_H + 12;
+
+  // colunas
+  const COL_META = 310;
+  const COL_HC   = 420;
+  const COL_DIA  = 520;
+
+  const DPR = 2;
+  const canvas = document.getElementById('hidden-canvas-metas');
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+
+  const hex2rgb = h => ({ r:parseInt(h.slice(1,3),16), g:parseInt(h.slice(3,5),16), b:parseInt(h.slice(5,7),16) });
+  const rr = (x,y,w,h,r) => {
+    if (w <= 0 || h <= 0) return;
+    const R = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+R, y);
+    ctx.arcTo(x+w, y, x+w, y+h, R);
+    ctx.arcTo(x+w, y+h, x, y+h, R);
+    ctx.arcTo(x, y+h, x, y, R);
+    ctx.arcTo(x, y, x+w, y, R);
+    ctx.closePath();
+  };
+
+  // fundo
+  ctx.fillStyle = '#f0f4ff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#dde3f0'; ctx.lineWidth = 1;
+  rr(0.5, 0.5, W-1, H-1, 14); ctx.stroke();
+
+  // header
+  const grad = ctx.createLinearGradient(0,0,W,0);
+  grad.addColorStop(0, 'rgba(0,153,204,0.08)');
+  grad.addColorStop(1, 'rgba(110,64,201,0.05)');
+  ctx.fillStyle = '#ffffff';
+  rr(0, 0, W, HEADER_H, 14); ctx.fill();
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, HEADER_H);
+
+  ctx.font = 'bold 11px Arial'; ctx.fillStyle = '#0099cc';
+  ctx.fillText('🎯  Controle PCP', PAD, 26);
+  ctx.font = 'bold 18px Arial'; ctx.fillStyle = '#0f1b35';
+  ctx.fillText('Metas Mensais — ' + titulo, PAD, 50);
+  ctx.font = '11px Arial'; ctx.fillStyle = '#8895b0';
+  ctx.fillText(dias + ' dias úteis', PAD, 68);
+  ctx.strokeStyle = '#dde3f0'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD, 82); ctx.lineTo(W-PAD, 82); ctx.stroke();
+
+  // KPIs
+  const kpis = [
+    { label:'META TOTAL', value:fmt(totalMeta), color:'#0099cc' },
+    { label:'HC PLANEJADO', value:String(totalHc), color:'#6e40c9' },
+    { label:'META/DIA TOTAL', value:fmt(Math.round(totalMetaDia)), color:'#c47f00' },
+    { label:'DIAS ÚTEIS', value:String(dias), color:'#00a854' },
+  ];
+  const kW = (W - PAD*2) / kpis.length;
+  kpis.forEach((k,i) => {
+    const kx = PAD + i*kW, ky = HEADER_H - 10;
+    ctx.fillStyle = '#ffffff';
+    rr(kx+2, ky, kW-4, 56, 6); ctx.fill();
+    ctx.strokeStyle = '#dde3f0'; ctx.lineWidth=1; ctx.stroke();
+    ctx.font='bold 7px Arial'; ctx.fillStyle='#8895b0';
+    ctx.textAlign='center';
+    ctx.fillText(k.label, kx+kW/2, ky+14);
+    ctx.font='bold 15px Arial'; ctx.fillStyle=k.color;
+    ctx.fillText(k.value, kx+kW/2, ky+40);
+    ctx.textAlign='left';
+  });
+
+  // tabela header
+  let y = HEADER_H + KPI_H + 8;
+  ctx.fillStyle = 'rgba(0,153,204,0.06)';
+  ctx.fillRect(0, y, W, TH_H);
+  ctx.font = 'bold 8px Arial'; ctx.fillStyle = '#8895b0';
+  ctx.fillText('ÁREA', PAD, y+16);
+  ctx.textAlign='center';
+  ctx.fillText('META MENSAL', COL_META, y+16);
+  ctx.fillText('HC PLAN', COL_HC, y+16);
+  ctx.fillText('META/DIA', COL_DIA, y+16);
+  ctx.textAlign='left';
+  y += TH_H;
+
+  // linhas
+  groups.forEach(g => {
+    const {r:gr,g:gg,b:gb} = hex2rgb(g.color);
+    ctx.fillStyle = `rgba(${gr},${gg},${gb},0.08)`;
+    ctx.fillRect(0, y, W, GROUP_H);
+    ctx.font='bold 9px Arial'; ctx.fillStyle=g.color;
+    ctx.fillText(g.name, PAD, y+16);
+    y += GROUP_H;
+
+    g.areas.forEach(row => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, y, W, ROW_H);
+      ctx.strokeStyle='#e8ecf8'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(0,y+ROW_H); ctx.lineTo(W,y+ROW_H); ctx.stroke();
+
+      const mid = y + ROW_H/2 + 4;
+
+      ctx.font='11px Arial'; ctx.fillStyle='#0f1b35';
+      ctx.fillText(row.icon, PAD, mid);
+      ctx.font='bold 10px Arial'; ctx.fillStyle='#0f1b35';
+      ctx.fillText(row.name, PAD+20, mid);
+
+      ctx.textAlign='center';
+
+      // Meta Mensal
+      ctx.font='bold 10px Arial'; ctx.fillStyle='#0099cc';
+      ctx.fillText(row.meta > 0 ? fmt(row.meta) : '—', COL_META, mid);
+
+      // HC
+      ctx.font='bold 10px Arial'; ctx.fillStyle='#6e40c9';
+      ctx.fillText(row.hc > 0 ? String(row.hc) : '—', COL_HC, mid);
+
+      // Meta/Dia
+      ctx.font='bold 10px Arial'; ctx.fillStyle='#c47f00';
+      ctx.fillText(row.metaDia > 0 ? fmt(row.metaDia) : '—', COL_DIA, mid);
+
+      ctx.textAlign='left';
+      y += ROW_H;
+    });
+
+    // subtotal do grupo
+    ctx.fillStyle = 'rgba(0,0,0,0.03)';
+    ctx.fillRect(0, y, W, SUB_H);
+    ctx.strokeStyle='#dde3f0'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,y+SUB_H); ctx.lineTo(W,y+SUB_H); ctx.stroke();
+
+    const smid = y + SUB_H/2 + 4;
+    ctx.font='bold 9px Arial'; ctx.fillStyle=g.color;
+    ctx.fillText(`SUBTOTAL ${g.name}`, PAD, smid);
+
+    ctx.textAlign='center';
+    ctx.font='bold 10px Arial'; ctx.fillStyle='#0099cc';
+    ctx.fillText(g.totalMeta > 0 ? fmt(g.totalMeta) : '—', COL_META, smid);
+    ctx.font='bold 10px Arial'; ctx.fillStyle='#6e40c9';
+    ctx.fillText(g.totalHc > 0 ? String(g.totalHc) : '—', COL_HC, smid);
+    ctx.font='bold 10px Arial'; ctx.fillStyle='#c47f00';
+    ctx.fillText(g.totalMetaDia > 0 ? fmt(g.totalMetaDia) : '—', COL_DIA, smid);
+    ctx.textAlign='left';
+
+    y += SUB_H;
+  });
+
+  // footer
+  ctx.fillStyle='rgba(0,153,204,0.05)';
+  ctx.fillRect(0, y, W, FOOTER_H);
+  ctx.font='10px Arial'; ctx.fillStyle='#8895b0';
+  ctx.textAlign='center';
+  ctx.fillText('Gerado por Controle PCP • Metas ' + titulo, W/2, y+FOOTER_H/2+4);
+  ctx.textAlign='left';
+
+  // preview
+  const previewCanvas = document.getElementById('share-canvas-metas');
+  const maxPreviewW = 520;
+  const displayW = Math.min(W, maxPreviewW);
+  const displayH = Math.round(H * (displayW / W));
+  previewCanvas.width = W * DPR;
+  previewCanvas.height = H * DPR;
+  previewCanvas.style.width = displayW + 'px';
+  previewCanvas.style.height = displayH + 'px';
+  previewCanvas.getContext('2d').drawImage(canvas, 0, 0);
+
+  document.getElementById('img-modal-metas-overlay').style.display = 'flex';
+}
+
+function baixarImagemMetas() {
+  const canvas = document.getElementById('hidden-canvas-metas');
+  const mes = document.getElementById('meta-mes')?.value || '0';
+  const ano = document.getElementById('meta-ano')?.value || '0';
+  const link = document.createElement('a');
+  link.download = `metas_${ano}-${mes.padStart(2,'0')}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+function closeImgModalMetas() {
+  document.getElementById('img-modal-metas-overlay').style.display = 'none';
 }
 
 
@@ -2843,6 +3101,7 @@ Object.assign(window, {
   renderDashboard, setDashToday, saveJustif, exportDashCSV,
   renderMetas, saveMetas, exportMetasCSV, recalcMetaRow,
   gerarImagem, baixarImagem, closeImgModal,
+  gerarImagemMetas, baixarImagemMetas, closeImgModalMetas,
   renderConfig, updateConfigPreview, saveConfig, resetConfig,
   abrirModalParada, fecharModalParada, atualizarDuracao, salvarParada,
   editarParada, deletarParada, exportParadasCSV, renderParadas,
