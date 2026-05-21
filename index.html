@@ -951,6 +951,7 @@ const INBOUND_AREAS = [
   { id: 'dobra', name: 'Dobra', icon: '📦', pdia: 582 },
   { id: 'check_in', name: 'Check In', icon: '☑️', pdia: 2910 },
   { id: 'armazenagem', name: 'Armazenagem', icon: '🏷️', pdia: 1261 },
+  { id: 'reprovada', name: 'Reprovada', icon: '❌', pdia: 3000 },
 ];
 const OUTBOUND_AREAS = [
   { id: 'picking',    name: 'Picking',    icon: '🎾', pdia: 485 },
@@ -976,6 +977,7 @@ const PRODUCAO_AREAS = [
   { id: 'p_dobra', name: 'DOBRA', icon: '📦', group: 'INBOUND' },
   { id: 'p_check_in', name: 'CHECK IN', icon: '☑️', group: 'INBOUND' },
   { id: 'p_armazenagem', name: 'ARMAZENAGEM', icon: '🏷️', group: 'INBOUND' },
+  { id: 'p_reprovada', name: 'REPROVADA', icon: '❌', group: 'INBOUND' },
   // OUTBOUND
   { id: 'p_picking',    name: 'PICKING',    icon: '🎾', group: 'OUTBOUND' },
   { id: 'p_conferencia', name: 'CONFERÊNCIA', icon: '📑', group: 'OUTBOUND' },
@@ -1432,6 +1434,7 @@ const CAP_TO_PROD = {
   dobra:         'p_dobra',
   check_in:      'p_check_in',
   armazenagem:   'p_armazenagem',
+  reprovada:     'p_reprovada',
   picking:       'p_picking',
   conferencia:   'p_conferencia',
   expedicao:     'p_expedicao',
