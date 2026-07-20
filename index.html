@@ -925,13 +925,31 @@ const DB = {
     const { data, error } = await supabase
       .from('paradas').select('*').order('date', { ascending: false });
     if (error) { console.error('getParadas:', error); return []; }
-    return data || [];
+    // areas pode voltar como array (jsonb) ou string JSON (coluna text)
+    return (data || []).map(r => {
+      let areas = r.areas || [];
+      if (typeof areas === 'string') {
+        try { areas = JSON.parse(areas); } catch { areas = []; }
+      }
+      return { ...r, areas: Array.isArray(areas) ? areas : [], duracao: Number(r.duracao) || 0 };
+    });
   },
   saveParada: async (rec) => {
-    await supabase.from('paradas').upsert(rec, { onConflict: 'id' });
+    const { error } = await supabase.from('paradas').upsert({
+      id:      rec.id,
+      date:    rec.date,
+      motivo:  rec.motivo,
+      inicio:  rec.inicio || null,
+      fim:     rec.fim || null,
+      duracao: rec.duracao || 0,
+      obs:     rec.obs || '',
+      areas:   rec.areas || [],
+    }, { onConflict: 'id' });
+    if (error) throw new Error(error.message);
   },
   deleteParada: async (id) => {
-    await supabase.from('paradas').delete().eq('id', id);
+    const { error } = await supabase.from('paradas').delete().eq('id', id);
+    if (error) throw new Error(error.message);
   },
 };
 
@@ -993,6 +1011,9 @@ const PRODUCAO_AREAS = [
 //  HELPERS
 // ================================================================
 const fmt = (n) => n === 0 ? '0' : Number(n).toLocaleString('pt-BR');
+// Escapa texto livre antes de injetar em innerHTML (evita quebra de layout / XSS)
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const todayISO = () => new Date().toISOString().split('T')[0];
 const todayBR = () => {
   const d = new Date();
@@ -2619,6 +2640,8 @@ async function init() {
     overlay.remove();
     renderCapacidade();
     renderProducao();
+    setupFiltrosParadas();
+    renderParadas();
   } catch(e) {
     overlay.innerHTML = `
       <div style="font-size:40px">❌</div>
@@ -2901,13 +2924,13 @@ function renderParadas() {
       <td>${r.date}${r.date === today ? '<span class="badge-hoje">hoje</span>' : ''}
         ${cruzou ? `<div style="font-size:10px;color:var(--yellow);margin-top:2px">↪ continua ${fmtDuracao(dia2)} no dia seguinte</div>` : ''}
       </td>
-      <td style="color:var(--yellow);font-weight:600">${r.motivo}</td>
-      <td style="color:var(--text-secondary);font-size:12px;max-width:180px">${areasNomes}</td>
+      <td style="color:var(--yellow);font-weight:600">${esc(r.motivo)}</td>
+      <td style="color:var(--text-secondary);font-size:12px;max-width:180px">${esc(areasNomes)}</td>
       <td class="center" style="font-family:var(--font-mono)">${r.inicio || '—'}</td>
       <td class="center" style="font-family:var(--font-mono)">${r.fim || '—'}</td>
       <td class="center"><span style="font-family:var(--font-mono);color:var(--yellow);font-weight:700">${fmtDuracao(r.duracao)}</span></td>
       <td class="center"><span style="font-family:var(--font-mono);color:var(--red);font-weight:700">${pecas > 0 ? fmt(pecas) : '—'}</span></td>
-      <td style="color:var(--text-muted);font-size:12px">${r.obs || '—'}</td>
+      <td style="color:var(--text-muted);font-size:12px">${r.obs ? esc(r.obs) : '—'}</td>
       <td>
         <div class="td-actions">
           <button class="btn-icon edit" onclick="editarParada(${r.id})" title="Editar">✏️</button>
@@ -2916,8 +2939,13 @@ function renderParadas() {
       </td>
     </tr>`;
   }).join('');
+}
 
-  // listeners de filtro
+// Listeners dos filtros: registrados UMA vez no load.
+// Antes ficavam no fim de renderParadas(), depois do early return de "sem
+// registros" — com o filtro padrão "hoje" e nenhuma parada no dia, os botões
+// nunca ganhavam handler e a aba parecia travada.
+function setupFiltrosParadas() {
   document.querySelectorAll('.filter-btn-par').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('.filter-btn-par').forEach(b => b.classList.remove('active'));
@@ -2928,7 +2956,12 @@ function renderParadas() {
   });
   ['par-from','par-to'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.onchange = () => { parPeriod = 'custom'; document.querySelectorAll('.filter-btn-par').forEach(b => b.classList.remove('active')); renderParadas(); };
+    if (!el) return;
+    el.onchange = () => {
+      parPeriod = 'custom';
+      document.querySelectorAll('.filter-btn-par').forEach(b => b.classList.remove('active'));
+      renderParadas();
+    };
   });
 }
 
@@ -2999,7 +3032,7 @@ function abrirModalParada(id = null) {
       <textarea id="par-obs" rows="2" placeholder="Detalhes adicionais..."
         style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
           padding:10px 14px;border-radius:8px;font-size:13px;width:100%;outline:none;
-          resize:none;font-family:var(--font-display)">${rec?.obs || ''}</textarea>
+          resize:none;font-family:var(--font-display)">${esc(rec?.obs || '')}</textarea>
     </div>
 
     <div class="modal-actions">
@@ -3066,7 +3099,7 @@ async function salvarParada() {
     renderParadas();
   } catch(e) {
     console.error('Erro ao salvar parada:', e);
-    alert('Erro ao salvar parada. Verifique sua conexão.');
+    alert('Erro ao salvar parada: ' + e.message);
   }
 }
 
@@ -3076,9 +3109,14 @@ function editarParada(id) {
 
 async function deletarParada(id) {
   if (!confirm('Excluir esta parada?')) return;
-  await DB.deleteParada(id);
-  paradasRecords = paradasRecords.filter(r => r.id !== id);
-  renderParadas();
+  try {
+    await DB.deleteParada(id);
+    paradasRecords = paradasRecords.filter(r => r.id !== id);
+    renderParadas();
+  } catch (e) {
+    console.error('Erro ao excluir parada:', e);
+    alert('Erro ao excluir parada: ' + e.message);
+  }
 }
 
 function exportParadasCSV() {
