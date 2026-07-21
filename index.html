@@ -425,6 +425,10 @@ tr:hover td { background: var(--bg-hover); }
       <span class="icon">⛔</span>
       <span>Paradas</span>
     </button>
+    <button class="nav-btn" data-page="arvore">
+      <span class="icon">🌳</span>
+      <span>Árvore de Perdas</span>
+    </button>
   </nav>
   <div class="sidebar-footer">Controle PCP v1.0<br>Supabase Ready</div>
 </aside>
@@ -755,6 +759,32 @@ tr:hover td { background: var(--bg-hover); }
     </div>
   </div>
 
+  <!-- ===== PAGE: ÁRVORE DE PERDAS ===== -->
+  <div id="page-arvore" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">🌳 Árvore de Perdas</h1>
+        <p class="page-subtitle">Onde a capacidade instalada foi parar, por grupo</p>
+      </div>
+    </div>
+
+    <div class="filter-bar" style="margin-bottom:22px">
+      <span class="filter-label">Período:</span>
+      <button class="btn btn-ghost filter-btn-arv" data-arv="7d">7 dias</button>
+      <button class="btn btn-ghost filter-btn-arv active" data-arv="30d">30 dias</button>
+      <button class="btn btn-ghost filter-btn-arv" data-arv="all">Todos</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:8px">
+        <input type="date" id="arv-from">
+        <span style="color:var(--text-muted)">→</span>
+        <input type="date" id="arv-to">
+      </div>
+      <button class="btn btn-ghost" onclick="exportArvoreCSV()" style="margin-left:auto">⬇ CSV</button>
+    </div>
+
+    <div id="arv-cobertura" style="margin-bottom:18px"></div>
+    <div id="arv-content"></div>
+  </div>
+
 </main>
 
 <!-- ========== MODAL: REGISTRAR CAPACIDADE ========== -->
@@ -1062,6 +1092,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     if (btn.dataset.page === 'metas') renderMetas();
     if (btn.dataset.page === 'config') renderConfig();
     if (btn.dataset.page === 'paradas') renderParadas();
+    if (btn.dataset.page === 'arvore') renderArvore();
   });
 });
 
@@ -1580,7 +1611,7 @@ async function renderDashboard() {
       <th class="center">Produção Real</th>
       <th class="center">% Atingido</th>
       <th class="center">Barra</th>
-      <th style="min-width:220px">Justificativa</th>
+      <th style="min-width:260px">Motivo / Observações</th>
     </tr></thead><tbody>`;
 
   let lastGroup = null;
@@ -1636,9 +1667,9 @@ async function renderDashboard() {
     const barColor = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--yellow)' : 'var(--red)';
     const barW = Math.min(pct, 100);
     const justifKey = `${dateBR}_${area.id}`;
-    const justifVal = dashJustif[justifKey] || '';
+    const { motivo: justifMotivo, obs: justifObs } = parseJustif(dashJustif[justifKey]);
     const needJustif = pct < 100;
-    const saved = justifVal.trim().length > 0;
+    const saved = justifMotivo.trim().length > 0 || justifObs.trim().length > 0;
 
     // HC comparison
     const hcDiff = hcReal - hcPlan;
@@ -1646,16 +1677,24 @@ async function renderDashboard() {
 
     let justifCell = '';
     if (needJustif) {
+      const opts = buildMotivosOptions(justifMotivo);
       justifCell = `<td style="vertical-align:middle;padding:6px 10px">
         <div style="display:flex;align-items:center;gap:6px">
-          <input type="text" id="justif-${area.id}" value="${justifVal.replace(/"/g, '&quot;')}"
-            placeholder="Motivo..."
-            style="flex:1;background:var(--bg-input);border:1px solid ${saved ? 'var(--green)' : 'var(--border-light)'};
-              color:var(--text-primary);padding:7px 10px;border-radius:6px;font-family:var(--font-display);
-              font-size:12px;outline:none;transition:border-color 0.15s"
-            onfocus="this.style.borderColor='var(--red)'"
-            onblur="this.style.borderColor='${saved ? 'var(--green)' : 'var(--border-light)'}'"
-            onkeydown="if(event.key==='Enter'){saveJustif('${dateBR}','${area.id}');this.blur()}">
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <select id="justif-motivo-${area.id}"
+              style="background:var(--bg-input);border:1px solid ${saved ? 'var(--green)' : 'var(--border-light)'};
+                color:var(--text-primary);padding:6px 8px;border-radius:6px;font-family:var(--font-display);
+                font-size:12px;outline:none;width:100%">
+              <option value="">— selecione o motivo —</option>
+              ${opts}
+            </select>
+            <input type="text" id="justif-obs-${area.id}" value="${esc(justifObs)}"
+              placeholder="Observações (opcional)"
+              style="background:var(--bg-input);border:1px solid var(--border-light);
+                color:var(--text-primary);padding:6px 8px;border-radius:6px;font-family:var(--font-display);
+                font-size:12px;outline:none;width:100%"
+              onkeydown="if(event.key==='Enter'){saveJustif('${dateBR}','${area.id}');this.blur()}">
+          </div>
           <button onclick="saveJustif('${dateBR}','${area.id}')"
             style="background:var(--red);border:none;color:#fff;padding:6px 10px;border-radius:6px;
               font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:var(--font-display);
@@ -1702,9 +1741,25 @@ function setDashToday() {
   renderDashboard();
 }
 
+// Justificativa passou de texto puro para { motivo, obs }.
+// Registros antigos (string) viram observação sem motivo, sem perder nada.
+function parseJustif(raw) {
+  if (!raw) return { motivo: '', obs: '' };
+  if (typeof raw === 'object') return { motivo: raw.motivo || '', obs: raw.obs || '' };
+  try {
+    const o = JSON.parse(raw);
+    if (o && typeof o === 'object') return { motivo: o.motivo || '', obs: o.obs || '' };
+  } catch { /* texto puro do formato antigo */ }
+  return { motivo: '', obs: String(raw) };
+}
+
+const serializeJustif = (motivo, obs) => JSON.stringify({ motivo: motivo || '', obs: obs || '' });
+
 async function saveJustif(dateBR, areaId) {
   const key = `${dateBR}_${areaId}`;
-  const val = document.getElementById(`justif-${areaId}`)?.value || '';
+  const motivo = document.getElementById(`justif-motivo-${areaId}`)?.value || '';
+  const obs    = document.getElementById(`justif-obs-${areaId}`)?.value || '';
+  const val = serializeJustif(motivo, obs);
   dashJustif[key] = val;
   await DB.saveJustif({ [key]: val });
   renderDashboard();
@@ -1721,7 +1776,7 @@ function exportDashCSV() {
   const metaRec = metasData[metaKey] || {};
   const diasUteis = metaRec.diasUteis || 20;
 
-  let csv = 'Data,Área,HC Plan,HC Real,Meta/Dia,Capacidade,Produção Real,% Atingido,Justificativa\n';
+  let csv = 'Data,Área,HC Plan,HC Real,Meta/Dia,Capacidade,Produção Real,% Atingido,Motivo,Observações\n';
   DASH_GROUPS.forEach(g => {
     g.areas.forEach(a => {
       let cap = 0, hcReal = 0;
@@ -1735,8 +1790,10 @@ function exportDashCSV() {
       const metaDia = diasUteis > 0 && metaMensal > 0 ? Math.ceil(metaMensal / diasUteis) : 0;
       const prod = prodRec?.areas?.[CAP_TO_PROD[a.id]] || 0;
       const pct = cap > 0 ? Math.round((prod / cap) * 100) : 0;
-      const justif = (dashJustif[`${dateBR}_${a.id}`] || '').replace(/"/g, '""');
-      csv += `${dateBR},"${a.name}",${hcPlan},${hcReal},${metaDia},${cap},${prod},${pct}%,"${justif}"\n`;
+      const j = parseJustif(dashJustif[`${dateBR}_${a.id}`]);
+      const mot = j.motivo.replace(/"/g, '""');
+      const obs = j.obs.replace(/"/g, '""');
+      csv += `${dateBR},"${a.name}",${hcPlan},${hcReal},${metaDia},${cap},${prod},${pct}%,"${mot}","${obs}"\n`;
     });
   });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1992,7 +2049,8 @@ function gerarImagem() {
       const prod = prodRec?.areas?.[CAP_TO_PROD[a.id]] || 0;
       const pct  = cap > 0 ? Math.round((prod / cap) * 100) : (prod > 0 ? 999 : 0);
       const justifKey = `${dateBR}_${a.id}`;
-      const justif = dashJustif[justifKey] || '';
+      const jp = parseJustif(dashJustif[justifKey]);
+      const justif = [jp.motivo, jp.obs].filter(Boolean).join(' — ');
       totalCap += cap; totalProd += prod;
       totalHcPlan += hcPlan; totalHcReal += hcReal; totalMetaDia += metaDia;
       gAreas.push({ icon: a.icon, name: a.name, cap, prod, pct, hcPlan, hcReal, metaDia, justif });
@@ -2665,6 +2723,7 @@ async function init() {
     renderProducao();
     setupFiltrosParadas();
     renderParadas();
+    setupFiltrosArvore();
   } catch(e) {
     overlay.innerHTML = `
       <div style="font-size:40px">❌</div>
@@ -3475,6 +3534,308 @@ function exportParadasCSV() {
 }
 
 
+// ============ ÁRVORE DE PERDAS ============
+let arvPeriod = '30d';
+const arvExpandido = new Set();
+
+const GRUPOS_ARVORE = [
+  { key: 'INBOUND',     name: 'Inbound',     areas: INBOUND_AREAS,     cor: 'var(--cyan)'   },
+  { key: 'OUTBOUND',    name: 'Outbound',    areas: OUTBOUND_AREAS,    cor: 'var(--purple)' },
+  { key: 'RED_CARPET',  name: 'Red Carpet',  areas: RED_CARPET_AREAS,  cor: 'var(--yellow)' },
+];
+
+// Descobre a categoria de um motivo. Motivos personalizados e texto
+// livre caem em "Outro", que é onde a investigação começa.
+function getCategoriaMotivo(motivo) {
+  const g = MOTIVOS_PADRAO.find(g => g.itens.includes(motivo));
+  return g ? g.grupo : 'Outro';
+}
+
+// Datas do período que têm capacidade E produção registradas.
+// Sem os dois lados a conta não fecha: um dia com capacidade mas sem
+// produção lançada jogaria tudo para "não identificada".
+function getDatasArvore() {
+  const capDates = new Set(capacityRecords.map(r => r.date));
+  const prodDates = new Set(productionRecords.map(r => r.date));
+  const todas = [...capDates].filter(d => prodDates.has(d));
+
+  let dentro = todas;
+  if (arvPeriod === '7d' || arvPeriod === '30d') {
+    const dias = arvPeriod === '7d' ? 7 : 30;
+    const cutoff = new Date(Date.now() - dias * 86400000);
+    dentro = todas.filter(d => new Date(brToISO(d)) >= cutoff);
+  } else if (arvPeriod === 'custom') {
+    const from = document.getElementById('arv-from')?.value;
+    const to   = document.getElementById('arv-to')?.value;
+    dentro = todas.filter(d => {
+      const iso = brToISO(d);
+      return (!from || iso >= from) && (!to || iso <= to);
+    });
+  }
+
+  return {
+    datas: dentro.sort((a, b) => brToISO(a).localeCompare(brToISO(b))),
+    semProducao: [...capDates].filter(d => !prodDates.has(d)).length,
+  };
+}
+
+function calcArvore() {
+  const { datas, semProducao } = getDatasArvore();
+  const setDatas = new Set(datas);
+
+  const grupos = GRUPOS_ARVORE.map(g => {
+    let capacidade = 0, producao = 0;
+    const porCategoria = {};
+    const porMotivo = {};
+
+    datas.forEach(dt => {
+      const capRec  = capacityRecords.find(r => r.date === dt);
+      const prodRec = productionRecords.find(r => r.date === dt);
+
+      g.areas.forEach(a => {
+        const d = capRec?.areas?.[a.id];
+        if (d) capacidade += (d.fixos || 0) * (d.pecasDia || 0) + (d.treinamento || 0) * (d.pecasTrein || 0);
+        producao += Number(prodRec?.areas?.[`p_${a.id}`]) || 0;
+      });
+    });
+
+    paradasRecords.forEach(p => {
+      if (!setDatas.has(p.date)) return;
+      const { dia1, dia2 } = calcDuracaoJornada(p.inicio, p.fim);
+      const horas = (dia1 + dia2) / 60;
+      if (!horas) return;
+
+      const doGrupo = getAreasDaParada(p).filter(a => g.areas.some(x => x.id === a.id));
+      doGrupo.forEach(a => {
+        const { dados } = getEfetivoArea(a.id, p.date);
+        if (!dados) return;
+        const capHora = ((dados.fixos || 0) * (dados.pecasDia || 0)
+                       + (dados.treinamento || 0) * (dados.pecasTrein || 0)) / JORNADA_HORAS;
+        const pecas = Math.round(horas * capHora);
+        if (!pecas) return;
+
+        const cat = getCategoriaMotivo(p.motivo);
+        porCategoria[cat] = (porCategoria[cat] || 0) + pecas;
+        porMotivo[cat] = porMotivo[cat] || {};
+        porMotivo[cat][p.motivo] = (porMotivo[cat][p.motivo] || 0) + pecas;
+      });
+    });
+
+    const perdaParada = Object.values(porCategoria).reduce((s, v) => s + v, 0);
+    const residual = capacidade - producao - perdaParada;
+
+    // Justificativas do dashboard, agora categorizadas por motivo.
+    // É a explicação do resíduo, na mesma taxonomia das paradas.
+    const jCat = {}, jMotivo = {}, jObs = [];
+    let semMotivo = 0, totalJustif = 0;
+    datas.forEach(dt => {
+      g.areas.forEach(a => {
+        const raw = dashJustif[`${dt}_${a.id}`];
+        if (!raw) return;
+        const { motivo, obs } = parseJustif(raw);
+        if (!motivo && !obs) return;
+        totalJustif++;
+        if (!motivo) { semMotivo++; }
+        else {
+          const cat = getCategoriaMotivo(motivo);
+          jCat[cat] = (jCat[cat] || 0) + 1;
+          jMotivo[cat] = jMotivo[cat] || {};
+          jMotivo[cat][motivo] = (jMotivo[cat][motivo] || 0) + 1;
+        }
+        if (obs) jObs.push({ data: dt, area: a.name, motivo, obs });
+      });
+    });
+
+    const justifCategorias = Object.entries(jCat).sort((a, b) => b[1] - a[1]);
+
+    return {
+      ...g, capacidade, producao, perdaParada, residual,
+      categorias: Object.entries(porCategoria).sort((a, b) => b[1] - a[1]),
+      motivos: porMotivo,
+      justifCategorias, justifMotivos: jMotivo, justifObs: jObs,
+      totalJustif, semMotivo,
+    };
+  });
+
+  return { grupos, dias: datas.length, semProducao };
+}
+
+function renderArvore() {
+  const { grupos, dias, semProducao } = calcArvore();
+
+  const cob = document.getElementById('arv-cobertura');
+  if (cob) {
+    cob.innerHTML = `
+      <div style="font-size:13px;color:var(--text-secondary)">
+        ${dias} dia(s) com capacidade e produção lançadas.
+        ${semProducao ? `<span style="color:var(--yellow)">${semProducao} dia(s) com capacidade mas sem produção ficaram de fora.</span>` : ''}
+      </div>`;
+  }
+
+  const box = document.getElementById('arv-content');
+  if (!box) return;
+  if (!dias) {
+    box.innerHTML = `<div class="table-card" style="padding:40px;text-align:center;color:var(--text-muted)">
+      Nenhum dia com capacidade e produção lançadas neste período.</div>`;
+    return;
+  }
+
+  box.innerHTML = grupos.map(g => {
+    if (!g.capacidade) return '';
+    const pct = (v) => (v / g.capacidade * 100);
+    const ganho = g.residual < 0;
+
+    const barra = (valor, cor, label, sub) => `
+      <div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+          <span style="font-size:13px;color:var(--text-primary)">${label}</span>
+          <span style="font-size:13px;font-family:var(--font-mono);color:${cor};font-weight:700">
+            ${fmt(Math.abs(valor))} <span style="color:var(--text-muted);font-weight:400">(${Math.abs(pct(valor)).toFixed(1)}%)</span>
+          </span>
+        </div>
+        <div style="height:8px;background:var(--bg-input);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${Math.min(100, Math.abs(pct(valor)))}%;background:${cor}"></div>
+        </div>
+        ${sub || ''}
+      </div>`;
+
+    const cats = g.categorias.map(([cat, val]) => {
+      const chave = `${g.key}:${cat}`;
+      const aberto = arvExpandido.has(chave);
+      const motivos = aberto ? Object.entries(g.motivos[cat] || {}).sort((a, b) => b[1] - a[1]) : [];
+      return `
+        <div style="margin-bottom:4px">
+          <div onclick="toggleArvCat('${esc(chave)}')" style="display:flex;justify-content:space-between;
+            padding:5px 0;cursor:pointer;font-size:12px;color:var(--text-secondary)">
+            <span>${aberto ? '▾' : '▸'} ${esc(cat)}</span>
+            <span style="font-family:var(--font-mono)">${fmt(val)}</span>
+          </div>
+          ${motivos.map(([m, v]) => `
+            <div style="display:flex;justify-content:space-between;padding:3px 0 3px 18px;
+              font-size:12px;color:var(--text-muted)">
+              <span>${esc(m)}</span><span style="font-family:var(--font-mono)">${fmt(v)}</span>
+            </div>`).join('')}
+        </div>`;
+    }).join('');
+
+    const chaveJ = `${g.key}:__justif`;
+    const abertoJ = arvExpandido.has(chaveJ);
+    const blocoJustif = g.totalJustif ? `
+      <div style="margin-top:8px;padding-left:12px;border-left:2px solid var(--border-light)">
+        <div onclick="toggleArvCat('${esc(chaveJ)}')" style="display:flex;justify-content:space-between;
+          padding:5px 0;cursor:pointer;font-size:12px;color:var(--text-secondary)">
+          <span>${abertoJ ? '▾' : '▸'} Justificativas do dashboard</span>
+          <span style="font-family:var(--font-mono)">${g.totalJustif}</span>
+        </div>
+        ${abertoJ ? `
+          ${g.justifCategorias.map(([cat, n]) => `
+            <div style="display:flex;justify-content:space-between;padding:3px 0 3px 18px;font-size:12px;color:var(--text-secondary)">
+              <span>${esc(cat)}</span><span style="font-family:var(--font-mono)">${n}</span>
+            </div>
+            ${Object.entries(g.justifMotivos[cat] || {}).sort((a, b) => b[1] - a[1]).map(([m, c]) => `
+              <div style="display:flex;justify-content:space-between;padding:2px 0 2px 34px;font-size:11px;color:var(--text-muted)">
+                <span>${esc(m)}</span><span style="font-family:var(--font-mono)">${c}</span>
+              </div>`).join('')}
+          `).join('')}
+          ${g.semMotivo ? `<div style="padding:4px 0 4px 18px;font-size:11px;color:var(--yellow)">
+            ${g.semMotivo} sem motivo selecionado</div>` : ''}
+          ${g.justifObs.length ? `
+            <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border-light)">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Observações</div>
+              ${g.justifObs.slice(0, 12).map(o => `
+                <div style="padding:3px 0 3px 18px;font-size:11px;color:var(--text-muted)">
+                  <span style="color:var(--text-secondary)">${esc(o.area)} ${esc(o.data)}</span> — ${esc(o.obs)}
+                </div>`).join('')}
+              ${g.justifObs.length > 12 ? `<div style="padding-left:18px;font-size:11px;color:var(--text-muted)">
+                e mais ${g.justifObs.length - 12}…</div>` : ''}
+            </div>` : ''}
+        ` : ''}
+      </div>` : `
+      <div style="margin-top:8px;padding-left:12px;font-size:12px;color:var(--text-muted)">
+        Nenhuma justificativa lançada no dashboard neste período.
+      </div>`;
+
+    return `
+      <div class="table-card" style="margin-bottom:18px;padding:20px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;
+          padding-bottom:12px;border-bottom:1px solid var(--border)">
+          <span style="font-size:15px;font-weight:700;color:${g.cor}">${g.name}</span>
+          <span style="font-size:13px;color:var(--text-secondary)">
+            Capacidade instalada: <strong style="font-family:var(--font-mono);color:var(--text-primary)">${fmt(g.capacidade)}</strong> peças
+          </span>
+        </div>
+        ${barra(g.producao, 'var(--green)', 'Produção realizada')}
+        ${barra(g.perdaParada, 'var(--yellow)', 'Perdas por parada',
+          g.categorias.length ? `<div style="margin-top:8px;padding-left:12px;border-left:2px solid var(--border-light)">${cats}</div>` : '')}
+        ${barra(g.residual, ganho ? 'var(--cyan)' : 'var(--red)',
+          ganho ? 'Ganho de ritmo (produziu acima do padrão)' : 'Perda não identificada', blocoJustif)}
+      </div>`;
+  }).join('') || `<div class="table-card" style="padding:40px;text-align:center;color:var(--text-muted)">
+    Sem capacidade registrada para os grupos neste período.</div>`;
+}
+
+function toggleArvCat(chave) {
+  arvExpandido.has(chave) ? arvExpandido.delete(chave) : arvExpandido.add(chave);
+  renderArvore();
+}
+
+function setupFiltrosArvore() {
+  document.querySelectorAll('.filter-btn-arv').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.filter-btn-arv').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      arvPeriod = btn.dataset.arv;
+      renderArvore();
+    };
+  });
+  ['arv-from', 'arv-to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.onchange = () => {
+      arvPeriod = 'custom';
+      document.querySelectorAll('.filter-btn-arv').forEach(b => b.classList.remove('active'));
+      renderArvore();
+    };
+  });
+}
+
+function exportArvoreCSV() {
+  const { grupos, dias } = calcArvore();
+  let csv = `Dias considerados,${dias}\n\nGrupo,Linha,Categoria,Pecas,% da capacidade\n`;
+  grupos.forEach(g => {
+    if (!g.capacidade) return;
+    const pct = (v) => (v / g.capacidade * 100).toFixed(1);
+    csv += `${g.name},Capacidade instalada,,${g.capacidade},100.0\n`;
+    csv += `${g.name},Producao realizada,,${g.producao},${pct(g.producao)}\n`;
+    csv += `${g.name},Perdas por parada,,${g.perdaParada},${pct(g.perdaParada)}\n`;
+    g.categorias.forEach(([cat, val]) => {
+      csv += `${g.name},Perdas por parada,${cat},${val},${pct(val)}\n`;
+      Object.entries(g.motivos[cat] || {}).forEach(([m, v]) => {
+        csv += `${g.name},Perdas por parada,${cat} > ${m.replace(/,/g, ';')},${v},${pct(v)}\n`;
+      });
+    });
+    const lbl = g.residual < 0 ? 'Ganho de ritmo' : 'Perda nao identificada';
+    csv += `${g.name},${lbl},,${Math.abs(g.residual)},${pct(Math.abs(g.residual))}\n`;
+    g.justifCategorias.forEach(([cat, n]) => {
+      csv += `${g.name},Justificativa,${cat},${n} ocorrencia(s),\n`;
+      Object.entries(g.justifMotivos[cat] || {}).sort((a, b) => b[1] - a[1]).forEach(([m, c]) => {
+        csv += `${g.name},Justificativa,${cat} > ${m.replace(/,/g, ';')},${c} ocorrencia(s),\n`;
+      });
+    });
+    if (g.semMotivo) csv += `${g.name},Justificativa,Sem motivo selecionado,${g.semMotivo} ocorrencia(s),\n`;
+    g.justifObs.forEach(o => {
+      const txt = o.obs.replace(/[",\n]/g, ' ');
+      csv += `${g.name},Observacao,${o.area} ${o.data},"${txt}",\n`;
+    });
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'arvore_de_perdas.csv';
+  a.click();
+}
+
 Object.assign(window, {
   openModal, closeModal, recalcModal, saveCapacidade,
   deleteRecord, editRecord, exportCSV, clearFilter,
@@ -3486,6 +3847,7 @@ Object.assign(window, {
   renderConfig, updateConfigPreview, saveConfig, resetConfig,
   abrirModalParada, fecharModalParada, atualizarDuracao, salvarParada, toggleMotivoOutro,
   gerenciarMotivos, adicionarMotivo, removerMotivo, fecharGerenciarMotivos,
+  renderArvore, toggleArvCat, exportArvoreCSV,
   editarParada, deletarParada, exportParadasCSV, renderParadas, verDetalhePerda,
 });
 
