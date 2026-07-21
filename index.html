@@ -920,6 +920,21 @@ const DB = {
     );
   },
 
+  // ---- MOTIVOS PERSONALIZADOS ----
+  getMotivos: async () => {
+    const { data, error } = await supabase
+      .from('configuracoes').select('*').eq('key', 'motivos_custom').single();
+    if (error || !data) return [];
+    return Array.isArray(data.value) ? data.value : [];
+  },
+  saveMotivos: async (arr) => {
+    const { error } = await supabase.from('configuracoes').upsert(
+      { key: 'motivos_custom', value: arr },
+      { onConflict: 'key' }
+    );
+    if (error) throw new Error(error.message);
+  },
+
   // Paradas de produção
   getParadas: async () => {
     const { data, error } = await supabase
@@ -2629,13 +2644,14 @@ async function init() {
   document.body.appendChild(overlay);
 
   try {
-    [capacityRecords, productionRecords, dashJustif, metasData, configData, paradasRecords] = await Promise.all([
+    [capacityRecords, productionRecords, dashJustif, metasData, configData, paradasRecords, motivosCustom] = await Promise.all([
       DB.getCapacity(),
       DB.getProduction(),
       DB.getJustif(),
       DB.getMetas(),
       DB.getConfig(),
       DB.getParadas(),
+      DB.getMotivos(),
     ]);
     overlay.remove();
     renderCapacidade();
@@ -2662,10 +2678,48 @@ let parPeriod = 'hoje';
 let editingParadaId = null;
 
 const MOTIVOS_PADRAO = [
-  'Queda de energia','Falta de internet','Manutenção de equipamento',
-  'Falta de insumo','Problema no sistema','Reunião geral',
-  'Limpeza','Outro',
+  { grupo: 'Infraestrutura', itens: [
+    'Queda de energia', 'Oscilação de energia', 'Falta de internet',
+    'Falta de água', 'Problema no ar-condicionado', 'Alagamento / infiltração',
+  ]},
+  { grupo: 'Sistema', itens: [
+    'Problema no sistema', 'Sistema lento', 'Instabilidade do WMS',
+    'Falha de leitor / coletor', 'Falha de impressora de etiqueta', 'Atualização de sistema',
+  ]},
+  { grupo: 'Equipamento', itens: [
+    'Manutenção de equipamento', 'Manutenção corretiva', 'Manutenção preventiva',
+    'Falha na esteira', 'Falha na máquina de passar', 'Falha em empilhadeira / transpaleteira',
+    'Falta de equipamento disponível',
+  ]},
+  { grupo: 'Insumo e material', itens: [
+    'Falta de insumo', 'Falta de embalagem', 'Falta de etiqueta',
+    'Falta de cabide', 'Falta de caixa / contentor', 'Falta de produto para processar',
+  ]},
+  { grupo: 'Pessoas', itens: [
+    'Reunião geral', 'Treinamento', 'Integração de novos colaboradores',
+    'Falta de colaborador', 'Absenteísmo elevado', 'Ginástica laboral',
+    'Realocação de equipe', 'Acidente de trabalho',
+  ]},
+  { grupo: 'Processo', itens: [
+    'Limpeza', 'Inventário', 'Auditoria / visita',
+    'Aguardando liberação', 'Aguardando conferência', 'Retrabalho',
+    'Divergência de estoque', 'Espera por área anterior',
+  ]},
+  { grupo: 'Externo', itens: [
+    'Atraso de transportadora', 'Atraso na entrada de carga',
+    'Condição climática', 'Simulado de emergência / brigada',
+  ]},
+  { grupo: 'Outro', itens: ['Outro'] },
 ];
+
+// Motivos criados pelo usuário, persistidos em configuracoes.motivos_custom
+let motivosCustom = [];
+
+// Lista plana, usada por validações e pelos rankings
+const MOTIVOS_FLAT = MOTIVOS_PADRAO.flatMap(g => g.itens);
+
+// Todos os motivos conhecidos (padrão + personalizados)
+const getTodosMotivos = () => [...MOTIVOS_FLAT, ...motivosCustom];
 
 const ALL_AREAS_PARADA = [
   { id: 'todas', name: 'Todas as áreas' },
@@ -3034,6 +3088,145 @@ function setupFiltrosParadas() {
 }
 
 // Abre a memória de cálculo da perda de uma parada
+// Mostra o campo de texto livre quando o motivo é "Outro"
+// Modal para criar/remover motivos personalizados
+function gerenciarMotivos() {
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px';
+  ov.onclick = (e) => { if (e.target === ov) fecharGerenciarMotivos(ov); };
+
+  ov.innerHTML = `
+    <div style="background:var(--bg-card);border-radius:12px;padding:24px;max-width:460px;width:100%;max-height:85vh;overflow:auto">
+      <h3 style="margin:0 0 4px;font-size:16px;color:var(--text-primary)">Meus motivos</h3>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">
+        Motivos criados por você. Os motivos padrão do sistema não aparecem aqui e não podem ser removidos.
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <input type="text" id="novo-motivo" placeholder="Nome do novo motivo" maxlength="60"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();adicionarMotivo();}"
+          style="flex:1;background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+            padding:9px 12px;border-radius:8px;font-size:13px;outline:none">
+        <button onclick="adicionarMotivo()"
+          style="background:var(--cyan);border:none;color:#fff;padding:9px 16px;border-radius:8px;
+            font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">Adicionar</button>
+      </div>
+      <div id="lista-motivos"></div>
+      <button onclick="fecharGerenciarMotivos(this.closest('div[style*=fixed]'))"
+        style="margin-top:18px;background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+          padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer">Fechar</button>
+    </div>`;
+
+  document.body.appendChild(ov);
+  renderListaMotivos();
+  document.getElementById('novo-motivo')?.focus();
+}
+
+function renderListaMotivos() {
+  const box = document.getElementById('lista-motivos');
+  if (!box) return;
+  if (!motivosCustom.length) {
+    box.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">
+      Nenhum motivo personalizado ainda.</div>`;
+    return;
+  }
+  box.innerHTML = motivosCustom.map((m, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;
+      border:1px solid var(--border-light);border-radius:8px;margin-bottom:6px">
+      <span style="font-size:13px;color:var(--text-primary)">${esc(m)}</span>
+      <span onclick="removerMotivo(${i})" title="Remover"
+        style="cursor:pointer;color:var(--red);font-size:16px;line-height:1;padding:0 4px">×</span>
+    </div>`).join('');
+}
+
+async function adicionarMotivo() {
+  const inp = document.getElementById('novo-motivo');
+  const nome = inp?.value.trim();
+  if (!nome) return;
+
+  if (getTodosMotivos().some(m => m.toLowerCase() === nome.toLowerCase())) {
+    alert('Esse motivo já existe na lista.');
+    return;
+  }
+
+  const anterior = [...motivosCustom];
+  motivosCustom.push(nome);
+  try {
+    await DB.saveMotivos(motivosCustom);
+    inp.value = '';
+    renderListaMotivos();
+  } catch (e) {
+    motivosCustom = anterior;
+    alert('Erro ao salvar motivo: ' + e.message);
+  }
+}
+
+async function removerMotivo(i) {
+  const nome = motivosCustom[i];
+  // Paradas já registradas guardam o texto do motivo, então não são afetadas
+  const emUso = paradasRecords.filter(r => r.motivo === nome).length;
+  const aviso = emUso
+    ? `\n\n${emUso} parada(s) já usam esse motivo. Elas continuam com o registro intacto, mas o motivo sai da lista de opções.`
+    : '';
+  if (!confirm(`Remover "${nome}" da lista?${aviso}`)) return;
+
+  const anterior = [...motivosCustom];
+  motivosCustom.splice(i, 1);
+  try {
+    await DB.saveMotivos(motivosCustom);
+    renderListaMotivos();
+  } catch (e) {
+    motivosCustom = anterior;
+    alert('Erro ao remover motivo: ' + e.message);
+  }
+}
+
+// Ao fechar, atualiza só as options do select — preserva horários, áreas e obs já preenchidos
+function fecharGerenciarMotivos(ov) {
+  const sel = document.getElementById('par-motivo');
+  ov?.remove();
+  if (!sel) return;
+
+  const atual = sel.value;
+  const inp = document.getElementById('par-motivo-outro');
+  const livre = inp?.value.trim() || '';
+  const preservar = atual === 'Outro' && livre ? livre : atual;
+
+  sel.innerHTML = buildMotivosOptions(preservar);
+
+  const existe = [...sel.options].some(o => o.value === preservar);
+  if (existe) {
+    sel.value = preservar;
+    if (inp) { inp.style.display = 'none'; }
+  } else {
+    sel.value = 'Outro';
+    if (inp) { inp.value = preservar; inp.style.display = preservar ? 'block' : 'none'; }
+  }
+}
+
+// Monta as options agrupadas do select de motivos
+function buildMotivosOptions(selecionado) {
+  const grupoCustom = motivosCustom.length
+    ? `<optgroup label="Meus motivos">` +
+      motivosCustom.map(m => `<option value="${esc(m)}" ${selecionado === m ? 'selected' : ''}>${esc(m)}</option>`).join('') +
+      `</optgroup>`
+    : '';
+
+  return MOTIVOS_PADRAO.map(g =>
+    `<optgroup label="${g.grupo}">` +
+    g.itens.map(m => `<option value="${esc(m)}" ${selecionado === m ? 'selected' : ''}>${esc(m)}</option>`).join('') +
+    `</optgroup>`
+  ).join('') + grupoCustom;
+}
+
+function toggleMotivoOutro() {
+  const sel = document.getElementById('par-motivo');
+  const inp = document.getElementById('par-motivo-outro');
+  if (!sel || !inp) return;
+  const outro = sel.value === 'Outro';
+  inp.style.display = outro ? 'block' : 'none';
+  if (outro) inp.focus();
+}
+
 function verDetalhePerda(id) {
   const rec = paradasRecords.find(r => r.id === id);
   if (!rec) return;
@@ -3101,9 +3294,11 @@ function abrirModalParada(id = null) {
     </label>`
   ).join('');
 
-  const motivosOptions = MOTIVOS_PADRAO.map(m =>
-    `<option value="${m}" ${rec?.motivo === m ? 'selected' : ''}>${m}</option>`
-  ).join('');
+  // Motivo salvo que não está em nenhuma lista = texto livre digitado em "Outro"
+  const motivoCustom = rec?.motivo && !getTodosMotivos().includes(rec.motivo) ? rec.motivo : '';
+  const selecionado = motivoCustom ? 'Outro' : rec?.motivo;
+
+  const motivosOptions = buildMotivosOptions(selecionado);
 
   document.getElementById('modal-parada-body').innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
@@ -3114,12 +3309,20 @@ function abrirModalParada(id = null) {
             padding:10px 14px;border-radius:8px;font-size:14px;width:100%;outline:none">
       </div>
       <div>
-        <label class="filter-label" style="display:block;margin-bottom:6px">Motivo <span style="color:var(--red)">*</span></label>
-        <select id="par-motivo"
+        <label class="filter-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span>Motivo <span style="color:var(--red)">*</span></span>
+          <span onclick="gerenciarMotivos()" style="cursor:pointer;font-size:11px;color:var(--cyan);text-decoration:underline">gerenciar lista</span>
+        </label>
+        <select id="par-motivo" onchange="toggleMotivoOutro()"
           style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
             padding:10px 14px;border-radius:8px;font-size:14px;width:100%;outline:none">
           ${motivosOptions}
         </select>
+        <input type="text" id="par-motivo-outro" placeholder="Descreva o motivo" maxlength="60"
+          value="${esc(motivoCustom)}"
+          style="display:${motivoCustom ? 'block' : 'none'};margin-top:8px;background:var(--bg-input);
+            border:1px solid var(--border-light);color:var(--text-primary);
+            padding:10px 14px;border-radius:8px;font-size:14px;width:100%;outline:none">
       </div>
       <div>
         <label class="filter-label" style="display:block;margin-bottom:6px">Horário Início</label>
@@ -3192,8 +3395,15 @@ function atualizarDuracao() {
 
 async function salvarParada() {
   const dateISO = document.getElementById('par-data')?.value;
-  const motivo  = document.getElementById('par-motivo')?.value;
+  let motivo    = document.getElementById('par-motivo')?.value;
   if (!dateISO || !motivo) { alert('Preencha data e motivo'); return; }
+
+  // "Outro" grava o texto digitado, não a palavra "Outro"
+  if (motivo === 'Outro') {
+    const livre = document.getElementById('par-motivo-outro')?.value.trim();
+    if (!livre) { alert('Descreva o motivo no campo ao lado de "Outro"'); return; }
+    motivo = livre;
+  }
 
   const inicio = document.getElementById('par-inicio')?.value || '';
   const fim    = document.getElementById('par-fim')?.value    || '';
@@ -3267,7 +3477,8 @@ Object.assign(window, {
   gerarImagem, baixarImagem, closeImgModal,
   gerarImagemMetas, baixarImagemMetas, closeImgModalMetas,
   renderConfig, updateConfigPreview, saveConfig, resetConfig,
-  abrirModalParada, fecharModalParada, atualizarDuracao, salvarParada,
+  abrirModalParada, fecharModalParada, atualizarDuracao, salvarParada, toggleMotivoOutro,
+  gerenciarMotivos, adicionarMotivo, removerMotivo, fecharGerenciarMotivos,
   editarParada, deletarParada, exportParadasCSV, renderParadas, verDetalhePerda,
 });
 
