@@ -2694,8 +2694,9 @@ function calcDuracaoJornada(inicio, fim) {
   const iMin = toMin(inicio);
   let   fMin = toMin(fim);
 
-  // Se fim <= início → parada cruzou meia-noite
-  const cruzouMeiaNoite = fMin <= iMin;
+  // Só cruzou meia-noite se o fim for estritamente anterior ao início.
+  // Com <= , um registro com fim igual ao início virava a jornada inteira.
+  const cruzouMeiaNoite = fMin < iMin;
 
   if (!cruzouMeiaNoite) {
     // Parada dentro do mesmo dia
@@ -2725,22 +2726,85 @@ function calcDuracao(inicio, fim) {
   return dia1 + dia2;
 }
 
-// Calcula peças perdidas para uma parada, por área
-function calcPecasPerdidas(rec) {
-  const { dia1, dia2 } = calcDuracaoJornada(rec.inicio, rec.fim);
-  const areas = (rec.areas || []).filter(id => id !== 'todas');
-  const todasAreas = (rec.areas || []).includes('todas');
-  const lista = todasAreas
-    ? [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS]
-    : [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS].filter(a => areas.includes(a.id));
+// Áreas efetivamente atingidas pela parada ('todas' expande para o conjunto completo)
+function getAreasDaParada(rec) {
+  const all = [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS];
+  const ids = rec.areas || [];
+  if (ids.includes('todas')) return all;
+  return all.filter(a => ids.includes(a.id));
+}
 
-  let total = 0;
-  lista.forEach(a => {
-    const pdia = getAreaPdia(a); // peças por dia (jornada completa)
-    const taxaMin = pdia / JORNADA_MIN; // peças por minuto
-    total += Math.round((dia1 + dia2) * taxaMin);
+// Jornada 07:00–16:48 = 588 min = 9,8 h
+const JORNADA_HORAS = JORNADA_MIN / 60;
+
+// Detalhamento da perda de uma parada, área por área.
+// Regra: para cada área atingida, busca o efetivo daquele DIA e multiplica
+// pela capacidade horária individual e pelas horas de parada.
+//   cap/hora por pessoa = pecasDia / 9,8   (treinamento usa pecasTrein)
+//   perda da área       = horas × (fixos × capHoraFixo + trein × capHoraTrein)
+function calcDetalhePerda(rec) {
+  const { dia1, dia2 } = calcDuracaoJornada(rec.inicio, rec.fim);
+  const minutos = dia1 + dia2;
+  const horas = minutos / 60;
+
+  const linhas = getAreasDaParada(rec).map(area => {
+    const { dados, fonte, date } = getEfetivoArea(area.id, rec.date);
+    const fixos = dados?.fixos || 0;
+    const trein = dados?.treinamento || 0;
+    const capHoraFixo = (dados?.pecasDia || 0) / JORNADA_HORAS;
+    const capHoraTrein = (dados?.pecasTrein || 0) / JORNADA_HORAS;
+    const capHora = fixos * capHoraFixo + trein * capHoraTrein;
+
+    return {
+      area: area.name,
+      fixos, trein,
+      pessoas: fixos + trein,
+      capHoraFixo, capHoraTrein, capHora,
+      pecas: Math.round(horas * capHora),
+      fonte, dataCap: date,
+    };
   });
-  return total;
+
+  return {
+    minutos, horas, linhas,
+    total: linhas.reduce((s, l) => s + l.pecas, 0),
+  };
+}
+
+function calcPecasPerdidas(rec) {
+  return calcDetalhePerda(rec).total;
+}
+
+// Efetivo da área na data da parada. Sem registro no dia exato,
+// usa o registro anterior mais próximo e sinaliza como estimado.
+function getEfetivoArea(areaId, dateBR) {
+  const alvo = dateBR ? brToISO(dateBR) : null;
+  const candidatos = capacityRecords
+    .filter(r => r.areas && r.areas[areaId])
+    .sort((a, b) => brToISO(b.date).localeCompare(brToISO(a.date)));
+
+  const exato = alvo ? candidatos.find(r => brToISO(r.date) === alvo) : null;
+  const usado = exato || (alvo ? candidatos.find(r => brToISO(r.date) < alvo) : candidatos[0]);
+  if (!usado) return { dados: null, fonte: 'ausente', date: null };
+
+  return { dados: usado.areas[areaId], fonte: exato ? 'exato' : 'estimado', date: usado.date };
+}
+
+// Compatibilidade com o ranking de setores
+function getCapDiaArea(areaId, dateBR) {
+  const { dados, fonte, date } = getEfetivoArea(areaId, dateBR);
+  if (!dados) return { cap: 0, fonte, date };
+  const cap = (dados.fixos || 0) * (dados.pecasDia || 0) + (dados.treinamento || 0) * (dados.pecasTrein || 0);
+  return { cap, fonte, date };
+}
+
+// Qualidade do dado de efetivo usado: 'exato' | 'estimado' | 'ausente'
+function getFonteCapacidade(rec) {
+  const fontes = getAreasDaParada(rec).map(a => getEfetivoArea(a.id, rec.date).fonte);
+  if (!fontes.length) return 'exato';
+  if (fontes.every(f => f === 'ausente')) return 'ausente';
+  if (fontes.some(f => f !== 'exato')) return 'estimado';
+  return 'exato';
 }
 
 function fmtDuracao(min) {
@@ -2843,16 +2907,13 @@ function renderParadas() {
   allAreas.forEach(a => { pecasPorSetor[a.id] = 0; });
 
   recs.forEach(r => {
-    const temTodas  = (r.areas || []).includes('todas');
-    const listaIds  = temTodas ? allAreas.map(a => a.id) : (r.areas || []);
     const { dia1, dia2 } = calcDuracaoJornada(r.inicio, r.fim);
-    const minTotal  = dia1 + dia2;
+    const minTotal = dia1 + dia2;
+    if (!minTotal) return;
 
-    listaIds.forEach(id => {
-      const area = allAreas.find(a => a.id === id);
-      if (!area) return;
-      const taxa = getAreaPdia(area) / JORNADA_MIN;
-      pecasPorSetor[id] = (pecasPorSetor[id] || 0) + Math.round(minTotal * taxa);
+    getAreasDaParada(r).forEach(area => {
+      const { cap } = getCapDiaArea(area.id, r.date);
+      pecasPorSetor[area.id] = (pecasPorSetor[area.id] || 0) + Math.round(minTotal * (cap / JORNADA_MIN));
     });
   });
 
@@ -2918,6 +2979,12 @@ function renderParadas() {
       .map(id => id === 'todas' ? 'Todas as áreas' : ALL_AREAS_PARADA.find(a => a.id === id)?.name || id)
       .join(', ');
     const pecas = calcPecasPerdidas(r);
+    const fonte = getFonteCapacidade(r);
+    const notaFonte = fonte === 'ausente'
+      ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px">sem capacidade registrada</div>'
+      : fonte === 'estimado'
+        ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px">efetivo estimado</div>'
+        : '';
     const { dia2 } = calcDuracaoJornada(r.inicio, r.fim);
     const cruzou   = dia2 > 0;
     return `<tr>
@@ -2929,7 +2996,8 @@ function renderParadas() {
       <td class="center" style="font-family:var(--font-mono)">${r.inicio || '—'}</td>
       <td class="center" style="font-family:var(--font-mono)">${r.fim || '—'}</td>
       <td class="center"><span style="font-family:var(--font-mono);color:var(--yellow);font-weight:700">${fmtDuracao(r.duracao)}</span></td>
-      <td class="center"><span style="font-family:var(--font-mono);color:var(--red);font-weight:700">${pecas > 0 ? fmt(pecas) : '—'}</span></td>
+      <td class="center"><span onclick="verDetalhePerda(${r.id})" title="Ver memória de cálculo"
+        style="font-family:var(--font-mono);color:var(--red);font-weight:700;cursor:pointer;border-bottom:1px dotted var(--red)">${pecas > 0 ? fmt(pecas) : '—'}</span>${notaFonte}</td>
       <td style="color:var(--text-muted);font-size:12px">${r.obs ? esc(r.obs) : '—'}</td>
       <td>
         <div class="td-actions">
@@ -2963,6 +3031,61 @@ function setupFiltrosParadas() {
       renderParadas();
     };
   });
+}
+
+// Abre a memória de cálculo da perda de uma parada
+function verDetalhePerda(id) {
+  const rec = paradasRecords.find(r => r.id === id);
+  if (!rec) return;
+  const det = calcDetalhePerda(rec);
+
+  const linhas = det.linhas.map(l => `
+    <tr style="border-bottom:1px solid var(--border-light)">
+      <td style="padding:8px 10px;font-size:13px;color:var(--text-primary)">${esc(l.area)}</td>
+      <td style="padding:8px 10px;text-align:center;font-family:var(--font-mono);font-size:13px">${l.fixos}${l.trein ? ` + ${l.trein}T` : ''}</td>
+      <td style="padding:8px 10px;text-align:center;font-family:var(--font-mono);font-size:13px">${l.capHoraFixo.toFixed(1)}</td>
+      <td style="padding:8px 10px;text-align:center;font-family:var(--font-mono);font-size:13px">${l.capHora.toFixed(1)}</td>
+      <td style="padding:8px 10px;text-align:center;font-family:var(--font-mono);font-size:13px;color:var(--red);font-weight:700">${fmt(l.pecas)}</td>
+    </tr>`).join('');
+
+  const aviso = det.linhas.some(l => l.fonte !== 'exato')
+    ? `<div style="margin-top:12px;font-size:12px;color:var(--text-muted)">
+         Algumas áreas não tinham capacidade registrada em ${esc(rec.date)}; foi usado o registro anterior mais próximo.
+       </div>` : '';
+
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px';
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `
+    <div style="background:var(--bg-card);border-radius:12px;padding:24px;max-width:640px;width:100%;max-height:85vh;overflow:auto">
+      <h3 style="margin:0 0 4px;font-size:16px;color:var(--text-primary)">Memória de cálculo</h3>
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+        ${esc(rec.date)} · ${esc(rec.motivo)} · ${det.minutos} min (${det.horas.toFixed(2)} h) dentro da jornada
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text-muted);font-weight:600">ÁREA</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--text-muted);font-weight:600">PESSOAS</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--text-muted);font-weight:600">PÇ/H CADA</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--text-muted);font-weight:600">PÇ/H ÁREA</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--text-muted);font-weight:600">PERDA</th>
+        </tr></thead>
+        <tbody>${linhas || '<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">Nenhuma área marcada</td></tr>'}</tbody>
+        <tfoot><tr style="border-top:2px solid var(--border)">
+          <td colspan="4" style="padding:10px;text-align:right;font-size:13px;color:var(--text-secondary)">Total</td>
+          <td style="padding:10px;text-align:center;font-family:var(--font-mono);font-size:15px;color:var(--red);font-weight:700">${fmt(det.total)}</td>
+        </tr></tfoot>
+      </table>
+      ${aviso}
+      <div style="margin-top:14px;font-size:12px;color:var(--text-muted)">
+        Perda por área = horas paradas × (fixos × pç/h + treinamento × pç/h reduzida).
+        Capacidade horária = peças por dia ÷ ${JORNADA_HORAS.toFixed(1)} h de jornada.
+      </div>
+      <button onclick="this.closest('div[style*=fixed]').remove()"
+        style="margin-top:18px;background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+          padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer">Fechar</button>
+    </div>`;
+  document.body.appendChild(ov);
 }
 
 function abrirModalParada(id = null) {
@@ -3145,7 +3268,7 @@ Object.assign(window, {
   gerarImagemMetas, baixarImagemMetas, closeImgModalMetas,
   renderConfig, updateConfigPreview, saveConfig, resetConfig,
   abrirModalParada, fecharModalParada, atualizarDuracao, salvarParada,
-  editarParada, deletarParada, exportParadasCSV, renderParadas,
+  editarParada, deletarParada, exportParadasCSV, renderParadas, verDetalhePerda,
 });
 
 init();
