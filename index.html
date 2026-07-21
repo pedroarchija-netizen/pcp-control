@@ -1069,6 +1069,13 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 //  CAPACIDADE — RENDER
 // ================================================================
 function getFilteredRecords() {
+  // slice() para não reordenar o array original de capacityRecords
+  return getFilteredRecordsRaw()
+    .slice()
+    .sort((a, b) => brToISO(a.date).localeCompare(brToISO(b.date)));
+}
+
+function getFilteredRecordsRaw() {
   const recs = capacityRecords;
   const today = todayBR();
   if (currentFilter === 'hoje') return recs.filter(r => r.date === today);
