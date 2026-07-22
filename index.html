@@ -4080,85 +4080,266 @@ function getDatasArvore() {
   };
 }
 
+// Perdas por parada quebradas por setor e por data.
+// Precisa ser por data porque o gap de cada dia é o que a justificativa
+// daquele dia explica — somar tudo antes perderia essa ligação.
+// Formato: { areaId: { '01/01/2026': { total, motivos: { motivo: pecas } } } }
+function calcParadasPorSetor(setDatas) {
+  const mapa = {};
+  paradasRecords.forEach(p => {
+    if (!setDatas.has(p.date)) return;
+    const { dia1, dia2 } = calcDuracaoJornada(p.inicio, p.fim);
+    const horas = (dia1 + dia2) / 60;
+    if (!horas) return;
+
+    getAreasDaParada(p).forEach(a => {
+      const { dados } = getEfetivoArea(a.id, p.date);
+      if (!dados) return;
+      const capHora = ((dados.fixos || 0) * (dados.pecasDia || 0)
+                     + (dados.treinamento || 0) * (dados.pecasTrein || 0)) / JORNADA_HORAS;
+      const pecas = Math.round(horas * capHora);
+      if (!pecas) return;
+
+      mapa[a.id] = mapa[a.id] || {};
+      const slot = mapa[a.id][p.date] = mapa[a.id][p.date] || { total: 0, motivos: {} };
+      slot.total += pecas;
+      slot.motivos[p.motivo] = (slot.motivos[p.motivo] || 0) + pecas;
+    });
+  });
+  return mapa;
+}
+
 function calcArvore() {
   const { datas, semProducao } = getDatasArvore();
   const setDatas = new Set(datas);
+  const paradaPorSetor = calcParadasPorSetor(setDatas);
 
   const grupos = GRUPOS_ARVORE.map(g => {
-    let capacidade = 0, producao = 0;
-    const porCategoria = {};
-    const porMotivo = {};
+    const setores = g.areas.map(a => {
+      let capacidade = 0, producao = 0, perdaParada = 0;
+      const parCat = {}, parMotivo = {};
+      const jusCat = {}, jusMotivo = {}, jusObs = [];
+      let totalJustif = 0, semMotivo = 0, gapJustificado = 0;
 
-    datas.forEach(dt => {
-      const capRec  = capacityRecords.find(r => r.date === dt);
-      const prodRec = productionRecords.find(r => r.date === dt);
+      datas.forEach(dt => {
+        const capRec  = capacityRecords.find(r => r.date === dt);
+        const prodRec = productionRecords.find(r => r.date === dt);
 
-      g.areas.forEach(a => {
         const d = capRec?.areas?.[a.id];
-        if (d) capacidade += (d.fixos || 0) * (d.pecasDia || 0) + (d.treinamento || 0) * (d.pecasTrein || 0);
-        producao += Number(prodRec?.areas?.[`p_${a.id}`]) || 0;
-      });
-    });
+        const capDia = d
+          ? (d.fixos || 0) * (d.pecasDia || 0) + (d.treinamento || 0) * (d.pecasTrein || 0)
+          : 0;
+        const prodDia = Number(prodRec?.areas?.[`p_${a.id}`]) || 0;
+        capacidade += capDia;
+        producao   += prodDia;
 
-    paradasRecords.forEach(p => {
-      if (!setDatas.has(p.date)) return;
-      const { dia1, dia2 } = calcDuracaoJornada(p.inicio, p.fim);
-      const horas = (dia1 + dia2) / 60;
-      if (!horas) return;
+        // Perdas por parada do dia, já categorizadas
+        const par = paradaPorSetor[a.id]?.[dt];
+        if (par) {
+          perdaParada += par.total;
+          Object.entries(par.motivos).forEach(([m, v]) => {
+            const cat = getCategoriaMotivo(m);
+            parCat[cat] = (parCat[cat] || 0) + v;
+            parMotivo[cat] = parMotivo[cat] || {};
+            parMotivo[cat][m] = (parMotivo[cat][m] || 0) + v;
+          });
+        }
 
-      const doGrupo = getAreasDaParada(p).filter(a => g.areas.some(x => x.id === a.id));
-      doGrupo.forEach(a => {
-        const { dados } = getEfetivoArea(a.id, p.date);
-        if (!dados) return;
-        const capHora = ((dados.fixos || 0) * (dados.pecasDia || 0)
-                       + (dados.treinamento || 0) * (dados.pecasTrein || 0)) / JORNADA_HORAS;
-        const pecas = Math.round(horas * capHora);
-        if (!pecas) return;
+        // Gap do dia = o que sobrou sem explicação depois de descontar as paradas.
+        // É esse número que a justificativa do dashboard está explicando.
+        const gapDia = Math.max(0, capDia - prodDia - (par?.total || 0));
 
-        const cat = getCategoriaMotivo(p.motivo);
-        porCategoria[cat] = (porCategoria[cat] || 0) + pecas;
-        porMotivo[cat] = porMotivo[cat] || {};
-        porMotivo[cat][p.motivo] = (porMotivo[cat][p.motivo] || 0) + pecas;
-      });
-    });
-
-    const perdaParada = Object.values(porCategoria).reduce((s, v) => s + v, 0);
-    const residual = capacidade - producao - perdaParada;
-
-    // Justificativas do dashboard, agora categorizadas por motivo.
-    // É a explicação do resíduo, na mesma taxonomia das paradas.
-    const jCat = {}, jMotivo = {}, jObs = [];
-    let semMotivo = 0, totalJustif = 0;
-    datas.forEach(dt => {
-      g.areas.forEach(a => {
         const raw = dashJustif[`${dt}_${a.id}`];
         if (!raw) return;
         const { motivo, obs } = parseJustif(raw);
         if (!motivo && !obs) return;
+
         totalJustif++;
-        if (!motivo) { semMotivo++; }
-        else {
+        if (!motivo) {
+          semMotivo++;
+        } else {
           const cat = getCategoriaMotivo(motivo);
-          jCat[cat] = (jCat[cat] || 0) + 1;
-          jMotivo[cat] = jMotivo[cat] || {};
-          jMotivo[cat][motivo] = (jMotivo[cat][motivo] || 0) + 1;
+          jusCat[cat] = jusCat[cat] || { ocor: 0, pecas: 0 };
+          jusCat[cat].ocor++;
+          jusCat[cat].pecas += gapDia;
+
+          jusMotivo[cat] = jusMotivo[cat] || {};
+          jusMotivo[cat][motivo] = jusMotivo[cat][motivo] || { ocor: 0, pecas: 0 };
+          jusMotivo[cat][motivo].ocor++;
+          jusMotivo[cat][motivo].pecas += gapDia;
+
+          gapJustificado += gapDia;
         }
-        if (obs) jObs.push({ data: dt, area: a.name, motivo, obs });
+        if (obs) jusObs.push({ data: dt, motivo, obs, pecas: gapDia });
       });
+
+      const residual = capacidade - producao - perdaParada;
+
+      return {
+        id: a.id, name: a.name, icon: a.icon,
+        capacidade, producao, perdaParada, residual,
+        atingimento: capacidade ? (producao / capacidade * 100) : 0,
+        categorias: Object.entries(parCat).sort((x, y) => y[1] - x[1]),
+        motivos: parMotivo,
+        justifCategorias: Object.entries(jusCat)
+          .sort((x, y) => (y[1].pecas - x[1].pecas) || (y[1].ocor - x[1].ocor)),
+        justifMotivos: jusMotivo,
+        justifObs: jusObs.sort((x, y) => y.pecas - x.pecas),
+        totalJustif, semMotivo, gapJustificado,
+      };
     });
 
-    const justifCategorias = Object.entries(jCat).sort((a, b) => b[1] - a[1]);
+    const soma = (k) => setores.reduce((s, x) => s + x[k], 0);
+    const capacidade = soma('capacidade');
+    const producao   = soma('producao');
 
     return {
-      ...g, capacidade, producao, perdaParada, residual,
-      categorias: Object.entries(porCategoria).sort((a, b) => b[1] - a[1]),
-      motivos: porMotivo,
-      justifCategorias, justifMotivos: jMotivo, justifObs: jObs,
-      totalJustif, semMotivo,
+      ...g, setores,
+      capacidade, producao,
+      perdaParada: soma('perdaParada'),
+      residual:    soma('residual'),
+      totalJustif: soma('totalJustif'),
+      atingimento: capacidade ? (producao / capacidade * 100) : 0,
     };
   });
 
   return { grupos, dias: datas.length, semProducao };
+}
+
+// ---------- Render ----------
+
+const corAtingimento = (pct) =>
+  pct >= 100 ? 'var(--green)' : pct >= 90 ? 'var(--yellow)' : 'var(--red)';
+
+// Rótulo da última barra da árvore.
+// O que decide o texto é o ATINGIMENTO (produção x capacidade), não o sinal do
+// resíduo: o resíduo fica negativo sempre que a estimativa de perda por parada
+// passa do gap real, e nesse caso não houve ganho nenhum — a produção ficou
+// abaixo da capacidade e a conta das paradas é que estourou.
+function rotuloResidual(capacidade, producao, perdaParada) {
+  const gap = capacidade - producao;
+  const residual = gap - perdaParada;
+
+  if (gap > 0) {
+    return residual > 0
+      ? { label: 'Perda não justificada', cor: 'var(--red)', valor: residual,
+          csv: 'Perda nao justificada' }
+      : { label: 'Gap totalmente coberto pelas paradas registradas', cor: 'var(--yellow)', valor: 0,
+          csv: 'Gap coberto pelas paradas',
+          nota: `A estimativa de perda por parada (${fmt(perdaParada)}) ficou acima do gap real (${fmt(gap)}). Vale revisar horários ou áreas das paradas do período.` };
+  }
+  if (gap === 0) {
+    return { label: 'Capacidade atingida integralmente', cor: 'var(--green)', valor: 0,
+             csv: 'Capacidade atingida' };
+  }
+  return { label: 'Produção acima da capacidade planejada', cor: 'var(--cyan)', valor: Math.abs(gap),
+           csv: 'Producao acima da capacidade planejada' };
+}
+
+// Barra proporcional a uma base (capacidade da área ou do setor)
+function arvBarra(valor, base, cor, label, sub, compacto) {
+  const pct = base ? (valor / base * 100) : 0;
+  const fonte = compacto ? '12px' : '13px';
+  return `
+    <div style="margin-bottom:${compacto ? '10px' : '14px'}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+        <span style="font-size:${fonte};color:var(--text-primary)">${label}</span>
+        <span style="font-size:${fonte};font-family:var(--font-mono);color:${cor};font-weight:700">
+          ${fmt(Math.abs(valor))} <span style="color:var(--text-muted);font-weight:400">(${Math.abs(pct).toFixed(1)}%)</span>
+        </span>
+      </div>
+      <div style="height:${compacto ? '6px' : '8px'};background:var(--bg-input);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${Math.min(100, Math.abs(pct))}%;background:${cor}"></div>
+      </div>
+      ${sub || ''}
+    </div>`;
+}
+
+// Nível 3/4 de um setor: paradas categorizadas, justificativas categorizadas e observações
+function arvBlocoSetor(gKey, s) {
+  const linha = (texto, valor, recuo, cor, tam) => `
+    <div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0 3px ${recuo}px;
+      font-size:${tam || '12px'};color:${cor || 'var(--text-muted)'}">
+      <span>${texto}</span><span style="font-family:var(--font-mono);white-space:nowrap">${valor}</span>
+    </div>`;
+
+  // --- Perdas por parada ---
+  const kPar = `par:${gKey}:${s.id}`;
+  const abertoPar = arvExpandido.has(kPar);
+  const blocoParadas = s.perdaParada ? `
+    <div style="margin-top:6px">
+      <div onclick="toggleArvCat('${jsAttr(kPar)}')" style="display:flex;justify-content:space-between;
+        padding:6px 0;cursor:pointer;font-size:12.5px;color:var(--yellow);font-weight:600">
+        <span>${abertoPar ? '▾' : '▸'} ⛔ Perdas por parada</span>
+        <span style="font-family:var(--font-mono)">${fmt(s.perdaParada)}</span>
+      </div>
+      ${abertoPar ? s.categorias.map(([cat, val]) => `
+        ${linha(esc(cat), fmt(val), 18, 'var(--text-secondary)')}
+        ${Object.entries(s.motivos[cat] || {}).sort((a, b) => b[1] - a[1])
+          .map(([m, v]) => linha(esc(m), fmt(v), 34, 'var(--text-muted)', '11.5px')).join('')}
+      `).join('') : ''}
+    </div>` : '';
+
+  // --- Justificativas categorizadas de não atingimento ---
+  const kJus = `jus:${gKey}:${s.id}`;
+  const abertoJus = arvExpandido.has(kJus);
+  const blocoJustif = s.totalJustif ? `
+    <div style="margin-top:6px">
+      <div onclick="toggleArvCat('${jsAttr(kJus)}')" style="display:flex;justify-content:space-between;
+        padding:6px 0;cursor:pointer;font-size:12.5px;color:var(--red);font-weight:600">
+        <span>${abertoJus ? '▾' : '▸'} 📝 Justificativas de não atingimento</span>
+        <span style="font-family:var(--font-mono)">${fmt(s.gapJustificado)} · ${s.totalJustif} ocor.</span>
+      </div>
+      ${abertoJus ? `
+        ${s.justifCategorias.map(([cat, o]) => `
+          ${linha(esc(cat), `${fmt(o.pecas)} · ${o.ocor}x`, 18, 'var(--text-secondary)')}
+          ${Object.entries(s.justifMotivos[cat] || {})
+            .sort((a, b) => (b[1].pecas - a[1].pecas) || (b[1].ocor - a[1].ocor))
+            .map(([m, v]) => linha(esc(m), `${fmt(v.pecas)} · ${v.ocor}x`, 34, 'var(--text-muted)', '11.5px'))
+            .join('')}
+        `).join('')}
+        ${s.semMotivo ? linha('Sem motivo selecionado', `${s.semMotivo}x`, 18, 'var(--yellow)') : ''}
+      ` : ''}
+    </div>` : '';
+
+  // --- Observações ---
+  const kObs = `obs:${gKey}:${s.id}`;
+  const abertoObs = arvExpandido.has(kObs);
+  const blocoObs = s.justifObs.length ? `
+    <div style="margin-top:6px">
+      <div onclick="toggleArvCat('${jsAttr(kObs)}')" style="display:flex;justify-content:space-between;
+        padding:6px 0;cursor:pointer;font-size:12.5px;color:var(--text-secondary);font-weight:600">
+        <span>${abertoObs ? '▾' : '▸'} 💬 Observações</span>
+        <span style="font-family:var(--font-mono)">${s.justifObs.length}</span>
+      </div>
+      ${abertoObs ? s.justifObs.map(o => `
+        <div style="padding:6px 0 6px 18px;font-size:11.5px;color:var(--text-muted);
+          border-bottom:1px solid var(--border-light)">
+          <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:2px">
+            <span style="color:var(--text-secondary);font-weight:600">${esc(o.data)}${o.motivo ? ` · ${esc(o.motivo)}` : ''}</span>
+            <span style="font-family:var(--font-mono);white-space:nowrap">${fmt(o.pecas)}</span>
+          </div>
+          <div style="line-height:1.45">${esc(o.obs)}</div>
+        </div>`).join('') : ''}
+    </div>` : '';
+
+  const nada = !s.perdaParada && !s.totalJustif && !s.justifObs.length
+    ? `<div style="padding:10px 0;font-size:12px;color:var(--text-muted)">
+         Sem paradas nem justificativas lançadas para este setor no período.
+       </div>` : '';
+
+  const res = rotuloResidual(s.capacidade, s.producao, s.perdaParada);
+
+  return `
+    <div style="padding:14px 18px 16px;background:var(--bg-deepest);border-top:1px solid var(--border-light)">
+      ${arvBarra(s.producao, s.capacidade, 'var(--green)', 'Produção realizada', '', true)}
+      ${arvBarra(s.perdaParada, s.capacidade, 'var(--yellow)', 'Perdas por parada', '', true)}
+      ${arvBarra(res.valor, s.capacidade, res.cor, res.label,
+        res.nota ? `<div style="margin-top:5px;font-size:11px;color:var(--yellow)">⚠ ${esc(res.nota)}</div>` : '', true)}
+      <div style="margin-top:12px;padding-left:12px;border-left:2px solid var(--border)">
+        ${blocoParadas}${blocoJustif}${blocoObs}${nada}
+      </div>
+    </div>`;
 }
 
 function renderArvore() {
@@ -4167,9 +4348,21 @@ function renderArvore() {
   const cob = document.getElementById('arv-cobertura');
   if (cob) {
     cob.innerHTML = `
-      <div style="font-size:13px;color:var(--text-secondary)">
-        ${dias} dia(s) com capacidade e produção lançadas.
-        ${semProducao ? `<span style="color:var(--yellow)">${semProducao} dia(s) com capacidade mas sem produção ficaram de fora.</span>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="font-size:13px;color:var(--text-secondary)">
+          ${dias} dia(s) com capacidade e produção lançadas.
+          ${semProducao ? `<span style="color:var(--yellow)">${semProducao} dia(s) com capacidade mas sem produção ficaram de fora.</span>` : ''}
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="arvExpandirTudo()"
+            style="background:none;border:1px solid var(--border);color:var(--text-secondary);
+              padding:5px 12px;border-radius:6px;font-size:11.5px;cursor:pointer;font-family:var(--font-display)">
+            Expandir tudo</button>
+          <button onclick="arvRecolherTudo()"
+            style="background:none;border:1px solid var(--border);color:var(--text-secondary);
+              padding:5px 12px;border-radius:6px;font-size:11.5px;cursor:pointer;font-family:var(--font-display)">
+            Recolher tudo</button>
+        </div>
       </div>`;
   }
 
@@ -4183,96 +4376,94 @@ function renderArvore() {
 
   box.innerHTML = grupos.map(g => {
     if (!g.capacidade) return '';
-    const pct = (v) => (v / g.capacidade * 100);
-    const ganho = g.residual < 0;
 
-    const barra = (valor, cor, label, sub) => `
-      <div style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
-          <span style="font-size:13px;color:var(--text-primary)">${label}</span>
-          <span style="font-size:13px;font-family:var(--font-mono);color:${cor};font-weight:700">
-            ${fmt(Math.abs(valor))} <span style="color:var(--text-muted);font-weight:400">(${Math.abs(pct(valor)).toFixed(1)}%)</span>
-          </span>
-        </div>
-        <div style="height:8px;background:var(--bg-input);border-radius:4px;overflow:hidden">
-          <div style="height:100%;width:${Math.min(100, Math.abs(pct(valor)))}%;background:${cor}"></div>
-        </div>
-        ${sub || ''}
-      </div>`;
+    const kArea = `area:${g.key}`;
+    const areaFechada = arvExpandido.has(kArea);   // área nasce aberta
+    const resArea = rotuloResidual(g.capacidade, g.producao, g.perdaParada);
 
-    const cats = g.categorias.map(([cat, val]) => {
-      const chave = `${g.key}:${cat}`;
-      const aberto = arvExpandido.has(chave);
-      const motivos = aberto ? Object.entries(g.motivos[cat] || {}).sort((a, b) => b[1] - a[1]) : [];
+    // --- Nível 2: setores ---
+    const setores = g.setores.filter(s => s.capacidade || s.producao).map(s => {
+      const kSet = `set:${g.key}:${s.id}`;
+      const aberto = arvExpandido.has(kSet);
+      const cor = corAtingimento(s.atingimento);
+      const gap = s.capacidade - s.producao;
+
       return `
-        <div style="margin-bottom:4px">
-          <div onclick="toggleArvCat('${esc(chave)}')" style="display:flex;justify-content:space-between;
-            padding:5px 0;cursor:pointer;font-size:12px;color:var(--text-secondary)">
-            <span>${aberto ? '▾' : '▸'} ${esc(cat)}</span>
-            <span style="font-family:var(--font-mono)">${fmt(val)}</span>
+        <div style="border:1px solid var(--border-light);border-radius:var(--radius);overflow:hidden;margin-bottom:8px">
+          <div onclick="toggleArvCat('${jsAttr(kSet)}')"
+            style="display:flex;align-items:center;gap:12px;padding:11px 16px;cursor:pointer;
+              background:var(--bg-card);border-left:3px solid ${cor}">
+            <span style="color:var(--text-muted);font-size:11px;width:10px">${aberto ? '▾' : '▸'}</span>
+            <span style="font-size:15px">${s.icon || '•'}</span>
+            <span style="flex:1;font-size:13.5px;font-weight:600;color:var(--text-primary)">${esc(s.name)}</span>
+            <span style="font-size:11.5px;color:var(--text-muted);font-family:var(--font-mono);white-space:nowrap">
+              cap ${fmt(s.capacidade)} · prod ${fmt(s.producao)}
+            </span>
+            <span style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:${cor};
+              min-width:62px;text-align:right">${s.atingimento.toFixed(1)}%</span>
+            <span style="font-size:11.5px;font-family:var(--font-mono);color:${gap > 0 ? 'var(--red)' : 'var(--cyan)'};
+              min-width:74px;text-align:right">${gap > 0 ? '−' : '+'}${fmt(Math.abs(gap))}</span>
           </div>
-          ${motivos.map(([m, v]) => `
-            <div style="display:flex;justify-content:space-between;padding:3px 0 3px 18px;
-              font-size:12px;color:var(--text-muted)">
-              <span>${esc(m)}</span><span style="font-family:var(--font-mono)">${fmt(v)}</span>
-            </div>`).join('')}
+          ${aberto ? arvBlocoSetor(g.key, s) : ''}
         </div>`;
-    }).join('');
+    }).join('') || `<div style="padding:20px;text-align:center;font-size:12.5px;color:var(--text-muted)">
+      Nenhum setor com capacidade lançada neste período.</div>`;
 
-    const chaveJ = `${g.key}:__justif`;
-    const abertoJ = arvExpandido.has(chaveJ);
-    const blocoJustif = g.totalJustif ? `
-      <div style="margin-top:8px;padding-left:12px;border-left:2px solid var(--border-light)">
-        <div onclick="toggleArvCat('${esc(chaveJ)}')" style="display:flex;justify-content:space-between;
-          padding:5px 0;cursor:pointer;font-size:12px;color:var(--text-secondary)">
-          <span>${abertoJ ? '▾' : '▸'} Justificativas do dashboard</span>
-          <span style="font-family:var(--font-mono)">${g.totalJustif}</span>
-        </div>
-        ${abertoJ ? `
-          ${g.justifCategorias.map(([cat, n]) => `
-            <div style="display:flex;justify-content:space-between;padding:3px 0 3px 18px;font-size:12px;color:var(--text-secondary)">
-              <span>${esc(cat)}</span><span style="font-family:var(--font-mono)">${n}</span>
-            </div>
-            ${Object.entries(g.justifMotivos[cat] || {}).sort((a, b) => b[1] - a[1]).map(([m, c]) => `
-              <div style="display:flex;justify-content:space-between;padding:2px 0 2px 34px;font-size:11px;color:var(--text-muted)">
-                <span>${esc(m)}</span><span style="font-family:var(--font-mono)">${c}</span>
-              </div>`).join('')}
-          `).join('')}
-          ${g.semMotivo ? `<div style="padding:4px 0 4px 18px;font-size:11px;color:var(--yellow)">
-            ${g.semMotivo} sem motivo selecionado</div>` : ''}
-          ${g.justifObs.length ? `
-            <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border-light)">
-              <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Observações</div>
-              ${g.justifObs.slice(0, 12).map(o => `
-                <div style="padding:3px 0 3px 18px;font-size:11px;color:var(--text-muted)">
-                  <span style="color:var(--text-secondary)">${esc(o.area)} ${esc(o.data)}</span> — ${esc(o.obs)}
-                </div>`).join('')}
-              ${g.justifObs.length > 12 ? `<div style="padding-left:18px;font-size:11px;color:var(--text-muted)">
-                e mais ${g.justifObs.length - 12}…</div>` : ''}
-            </div>` : ''}
-        ` : ''}
-      </div>` : `
-      <div style="margin-top:8px;padding-left:12px;font-size:12px;color:var(--text-muted)">
-        Nenhuma justificativa lançada no dashboard neste período.
-      </div>`;
-
+    // --- Nível 1: área ---
     return `
-      <div class="table-card" style="margin-bottom:18px;padding:20px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;
-          padding-bottom:12px;border-bottom:1px solid var(--border)">
-          <span style="font-size:15px;font-weight:700;color:${g.cor}">${g.name}</span>
-          <span style="font-size:13px;color:var(--text-secondary)">
-            Capacidade instalada: <strong style="font-family:var(--font-mono);color:var(--text-primary)">${fmt(g.capacidade)}</strong> peças
-          </span>
+      <div class="table-card" style="margin-bottom:18px">
+        <div onclick="toggleArvCat('${jsAttr(kArea)}')"
+          style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+            padding:16px 20px;cursor:pointer;border-left:4px solid ${g.cor};background:var(--bg-deepest)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:var(--text-muted);font-size:12px">${areaFechada ? '▶' : '▼'}</span>
+            <span style="font-size:15px;font-weight:800;color:${g.cor}">${g.name}</span>
+            <span style="font-size:11.5px;color:var(--text-muted)">${g.setores.length} setores</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:18px;font-size:12.5px;color:var(--text-secondary)">
+            <span>Capacidade <strong style="font-family:var(--font-mono);color:var(--text-primary)">${fmt(g.capacidade)}</strong></span>
+            <span>Produção <strong style="font-family:var(--font-mono);color:var(--green)">${fmt(g.producao)}</strong></span>
+            <span style="font-size:15px;font-weight:800;font-family:var(--font-mono);color:${corAtingimento(g.atingimento)}">
+              ${g.atingimento.toFixed(1)}%</span>
+          </div>
         </div>
-        ${barra(g.producao, 'var(--green)', 'Produção realizada')}
-        ${barra(g.perdaParada, 'var(--yellow)', 'Perdas por parada',
-          g.categorias.length ? `<div style="margin-top:8px;padding-left:12px;border-left:2px solid var(--border-light)">${cats}</div>` : '')}
-        ${barra(g.residual, ganho ? 'var(--cyan)' : 'var(--red)',
-          ganho ? 'Ganho de ritmo (produziu acima do padrão)' : 'Perda não identificada', blocoJustif)}
+
+        ${areaFechada ? '' : `
+          <div style="padding:18px 20px">
+            ${arvBarra(g.producao, g.capacidade, 'var(--green)', 'Produção realizada')}
+            ${arvBarra(g.perdaParada, g.capacidade, 'var(--yellow)', 'Perdas por parada')}
+            ${arvBarra(resArea.valor, g.capacidade, resArea.cor, resArea.label,
+              resArea.nota ? `<div style="margin-top:6px;font-size:11.5px;color:var(--yellow)">⚠ ${esc(resArea.nota)}</div>` : '')}
+
+            <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+                color:var(--text-muted);margin-bottom:10px">Setores</div>
+              ${setores}
+            </div>
+          </div>`}
       </div>`;
   }).join('') || `<div class="table-card" style="padding:40px;text-align:center;color:var(--text-muted)">
-    Sem capacidade registrada para os grupos neste período.</div>`;
+    Sem capacidade registrada para as áreas neste período.</div>`;
+}
+
+function arvExpandirTudo() {
+  const { grupos } = calcArvore();
+  arvExpandido.clear();   // limpa também as áreas fechadas
+  grupos.forEach(g => {
+    g.setores.forEach(s => {
+      if (!s.capacidade && !s.producao) return;
+      arvExpandido.add(`set:${g.key}:${s.id}`);
+      if (s.perdaParada)      arvExpandido.add(`par:${g.key}:${s.id}`);
+      if (s.totalJustif)      arvExpandido.add(`jus:${g.key}:${s.id}`);
+      if (s.justifObs.length) arvExpandido.add(`obs:${g.key}:${s.id}`);
+    });
+  });
+  renderArvore();
+}
+
+function arvRecolherTudo() {
+  arvExpandido.clear();
+  renderArvore();
 }
 
 function toggleArvCat(chave) {
@@ -4302,35 +4493,61 @@ function setupFiltrosArvore() {
 
 function exportArvoreCSV() {
   const { grupos, dias } = calcArvore();
-  let csv = `Dias considerados,${dias}\n\nGrupo,Linha,Categoria,Pecas,% da capacidade\n`;
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const linhas = [['Area', 'Setor', 'Nivel', 'Categoria', 'Motivo', 'Pecas', 'Ocorrencias', 'Observacao']];
+
   grupos.forEach(g => {
     if (!g.capacidade) return;
-    const pct = (v) => (v / g.capacidade * 100).toFixed(1);
-    csv += `${g.name},Capacidade instalada,,${g.capacidade},100.0\n`;
-    csv += `${g.name},Producao realizada,,${g.producao},${pct(g.producao)}\n`;
-    csv += `${g.name},Perdas por parada,,${g.perdaParada},${pct(g.perdaParada)}\n`;
-    g.categorias.forEach(([cat, val]) => {
-      csv += `${g.name},Perdas por parada,${cat},${val},${pct(val)}\n`;
-      Object.entries(g.motivos[cat] || {}).forEach(([m, v]) => {
-        csv += `${g.name},Perdas por parada,${cat} > ${m.replace(/,/g, ';')},${v},${pct(v)}\n`;
+
+    // Nivel 1 - area
+    linhas.push([g.name, '', 'Area / Capacidade instalada', '', '', g.capacidade, '', '']);
+    linhas.push([g.name, '', 'Area / Producao realizada',   '', '', g.producao,   '', '']);
+    linhas.push([g.name, '', 'Area / Perdas por parada',    '', '', g.perdaParada, '', '']);
+    const resA = rotuloResidual(g.capacidade, g.producao, g.perdaParada);
+    linhas.push([g.name, '', `Area / ${resA.csv}`, '', '', resA.valor, '', '']);
+
+    g.setores.forEach(s => {
+      if (!s.capacidade && !s.producao) return;
+
+      // Nivel 2 - setor
+      linhas.push([g.name, s.name, 'Setor / Capacidade instalada', '', '', s.capacidade, '', '']);
+      linhas.push([g.name, s.name, 'Setor / Producao realizada',   '', '', s.producao,   '', '']);
+      linhas.push([g.name, s.name, 'Setor / Atingimento (%)',      '', '', s.atingimento.toFixed(1), '', '']);
+      linhas.push([g.name, s.name, 'Setor / Perdas por parada',    '', '', s.perdaParada, '', '']);
+      const resS = rotuloResidual(s.capacidade, s.producao, s.perdaParada);
+      linhas.push([g.name, s.name, `Setor / ${resS.csv}`, '', '', resS.valor, '', '']);
+
+      // Nivel 3a - paradas categorizadas
+      s.categorias.forEach(([cat, val]) => {
+        linhas.push([g.name, s.name, 'Parada / Categoria', cat, '', val, '', '']);
+        Object.entries(s.motivos[cat] || {}).sort((a, b) => b[1] - a[1]).forEach(([m, v]) => {
+          linhas.push([g.name, s.name, 'Parada / Motivo', cat, m, v, '', '']);
+        });
       });
-    });
-    const lbl = g.residual < 0 ? 'Ganho de ritmo' : 'Perda nao identificada';
-    csv += `${g.name},${lbl},,${Math.abs(g.residual)},${pct(Math.abs(g.residual))}\n`;
-    g.justifCategorias.forEach(([cat, n]) => {
-      csv += `${g.name},Justificativa,${cat},${n} ocorrencia(s),\n`;
-      Object.entries(g.justifMotivos[cat] || {}).sort((a, b) => b[1] - a[1]).forEach(([m, c]) => {
-        csv += `${g.name},Justificativa,${cat} > ${m.replace(/,/g, ';')},${c} ocorrencia(s),\n`;
+
+      // Nivel 3b - justificativas categorizadas
+      s.justifCategorias.forEach(([cat, o]) => {
+        linhas.push([g.name, s.name, 'Justificativa / Categoria', cat, '', o.pecas, o.ocor, '']);
+        Object.entries(s.justifMotivos[cat] || {})
+          .sort((a, b) => (b[1].pecas - a[1].pecas) || (b[1].ocor - a[1].ocor))
+          .forEach(([m, v]) => {
+            linhas.push([g.name, s.name, 'Justificativa / Motivo', cat, m, v.pecas, v.ocor, '']);
+          });
       });
-    });
-    if (g.semMotivo) csv += `${g.name},Justificativa,Sem motivo selecionado,${g.semMotivo} ocorrencia(s),\n`;
-    g.justifObs.forEach(o => {
-      const txt = o.obs.replace(/[",\n]/g, ' ');
-      csv += `${g.name},Observacao,${o.area} ${o.data},"${txt}",\n`;
+      if (s.semMotivo) {
+        linhas.push([g.name, s.name, 'Justificativa / Sem motivo', '', '', '', s.semMotivo, '']);
+      }
+
+      // Nivel 4 - observacoes
+      s.justifObs.forEach(o => {
+        linhas.push([g.name, s.name, 'Observacao', getCategoriaMotivo(o.motivo), o.motivo || '',
+          o.pecas, '', `${o.data} - ${o.obs}`]);
+      });
     });
   });
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const csv = `Dias considerados;${dias}\n\n` + linhas.map(l => l.map(q).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'arvore_de_perdas.csv';
@@ -4352,7 +4569,7 @@ Object.assign(window, {
   abrirModalMotivo, fecharModalMotivo, salvarMotivo, toggleOcultarMotivo,
   abrirModalCategoria, fecharModalCategoria, salvarCategoria, removerCategoria,
   exportMotivosCSV,
-  renderArvore, toggleArvCat, exportArvoreCSV,
+  renderArvore, toggleArvCat, exportArvoreCSV, arvExpandirTudo, arvRecolherTudo,
   editarParada, deletarParada, exportParadasCSV, renderParadas, verDetalhePerda,
 });
 
