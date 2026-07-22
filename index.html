@@ -425,6 +425,10 @@ tr:hover td { background: var(--bg-hover); }
       <span class="icon">⛔</span>
       <span>Paradas</span>
     </button>
+    <button class="nav-btn" data-page="motivos">
+      <span class="icon">🏷️</span>
+      <span>Motivos</span>
+    </button>
     <button class="nav-btn" data-page="arvore">
       <span class="icon">🌳</span>
       <span>Árvore de Perdas</span>
@@ -759,6 +763,61 @@ tr:hover td { background: var(--bg-hover); }
     </div>
   </div>
 
+  <!-- ===== PAGE: MOTIVOS ===== -->
+  <div id="page-motivos" class="page">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">🏷️ Motivos de Parada</h1>
+        <p class="page-subtitle">Administre a lista de motivos, organizada por categoria</p>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" onclick="abrirModalCategoria()">+ Nova categoria</button>
+        <button class="btn btn-primary" onclick="abrirModalMotivo()">+ Novo motivo</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px">
+      <div class="kpi-card" style="--kpi-color:var(--cyan)">
+        <div class="kpi-label">Motivos Ativos</div>
+        <div class="kpi-value" id="mot-kpi-total">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--purple)">
+        <div class="kpi-label">Categorias</div>
+        <div class="kpi-value" id="mot-kpi-cats">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--green)">
+        <div class="kpi-label">Personalizados</div>
+        <div class="kpi-value" id="mot-kpi-custom">—</div>
+      </div>
+      <div class="kpi-card" style="--kpi-color:var(--text-muted)">
+        <div class="kpi-label">Ocultos</div>
+        <div class="kpi-value" id="mot-kpi-ocultos">—</div>
+      </div>
+    </div>
+
+    <!-- BUSCA -->
+    <div class="filter-bar" style="margin-bottom:22px">
+      <div class="filter-group" style="flex:1">
+        <label class="filter-label">Buscar motivo</label>
+        <input type="text" id="mot-busca" placeholder="Digite para filtrar…" oninput="renderMotivos()"
+          style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+            padding:9px 14px;border-radius:8px;font-size:13.5px;width:100%;outline:none;font-family:var(--font-display)">
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Exibição</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 0">
+          <input type="checkbox" id="mot-mostrar-ocultos" onchange="renderMotivos()"
+            style="width:15px;height:15px;accent-color:var(--cyan);cursor:pointer">
+          <span style="font-size:13px;color:var(--text-secondary)">Mostrar motivos ocultos</span>
+        </label>
+      </div>
+      <button class="btn btn-ghost" onclick="exportMotivosCSV()">⬇ Exportar CSV</button>
+    </div>
+
+    <div id="mot-content" style="display:flex;flex-direction:column;gap:14px"></div>
+  </div>
+
   <!-- ===== PAGE: ÁRVORE DE PERDAS ===== -->
   <div id="page-arvore" class="page">
     <div class="page-header">
@@ -965,6 +1024,36 @@ const DB = {
     if (error) throw new Error(error.message);
   },
 
+  // ---- CATEGORIAS PERSONALIZADAS ----
+  getCategorias: async () => {
+    const { data, error } = await supabase
+      .from('configuracoes').select('*').eq('key', 'categorias_custom').single();
+    if (error || !data) return [];
+    return Array.isArray(data.value) ? data.value : [];
+  },
+  saveCategorias: async (arr) => {
+    const { error } = await supabase.from('configuracoes').upsert(
+      { key: 'categorias_custom', value: arr },
+      { onConflict: 'key' }
+    );
+    if (error) throw new Error(error.message);
+  },
+
+  // ---- MOTIVOS PADRÃO OCULTADOS ----
+  getMotivosOcultos: async () => {
+    const { data, error } = await supabase
+      .from('configuracoes').select('*').eq('key', 'motivos_ocultos').single();
+    if (error || !data) return [];
+    return Array.isArray(data.value) ? data.value : [];
+  },
+  saveMotivosOcultos: async (arr) => {
+    const { error } = await supabase.from('configuracoes').upsert(
+      { key: 'motivos_ocultos', value: arr },
+      { onConflict: 'key' }
+    );
+    if (error) throw new Error(error.message);
+  },
+
   // Paradas de produção
   getParadas: async () => {
     const { data, error } = await supabase
@@ -1059,6 +1148,16 @@ const fmt = (n) => n === 0 ? '0' : Number(n).toLocaleString('pt-BR');
 // Escapa texto livre antes de injetar em innerHTML (evita quebra de layout / XSS)
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+// Escapa texto que vai virar literal de string dentro de um atributo onclick="...".
+// Primeiro protege as aspas para o JS, depois escapa o que o HTML exige.
+// A aspa simples fica literal — é seguro dentro de um atributo com aspas duplas.
+const jsAttr = (s) => String(s ?? '')
+  .replace(/\\/g, '\\\\')
+  .replace(/'/g, "\\'")
+  .replace(/&/g, '&amp;')
+  .replace(/"/g, '&quot;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;');
 const todayISO = () => new Date().toISOString().split('T')[0];
 const todayBR = () => {
   const d = new Date();
@@ -1092,6 +1191,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     if (btn.dataset.page === 'metas') renderMetas();
     if (btn.dataset.page === 'config') renderConfig();
     if (btn.dataset.page === 'paradas') renderParadas();
+    if (btn.dataset.page === 'motivos') renderMotivos();
     if (btn.dataset.page === 'arvore') renderArvore();
   });
 });
@@ -2709,7 +2809,9 @@ async function init() {
   document.body.appendChild(overlay);
 
   try {
-    [capacityRecords, productionRecords, dashJustif, metasData, configData, paradasRecords, motivosCustom] = await Promise.all([
+    let motivosRaw;
+    [capacityRecords, productionRecords, dashJustif, metasData, configData, paradasRecords,
+     motivosRaw, categoriasCustom, motivosOcultos] = await Promise.all([
       DB.getCapacity(),
       DB.getProduction(),
       DB.getJustif(),
@@ -2717,7 +2819,11 @@ async function init() {
       DB.getConfig(),
       DB.getParadas(),
       DB.getMotivos(),
+      DB.getCategorias(),
+      DB.getMotivosOcultos(),
     ]);
+    // Converte o formato antigo (array de strings) para { nome, grupo }
+    motivosCustom = normalizarMotivosCustom(motivosRaw);
     overlay.remove();
     renderCapacidade();
     renderProducao();
@@ -2778,14 +2884,58 @@ const MOTIVOS_PADRAO = [
   { grupo: 'Outro', itens: ['Outro'] },
 ];
 
-// Motivos criados pelo usuário, persistidos em configuracoes.motivos_custom
+// Motivos criados pelo usuário: [{ nome, grupo }]
+// Persistidos em configuracoes.motivos_custom
 let motivosCustom = [];
 
-// Lista plana, usada por validações e pelos rankings
+// Categorias criadas pelo usuário: ['Qualidade', ...]
+// Persistidas em configuracoes.categorias_custom
+let categoriasCustom = [];
+
+// Nomes de motivos PADRÃO que o usuário optou por ocultar da lista de seleção.
+// Ocultar não apaga nada: paradas antigas guardam o texto do motivo e continuam intactas.
+let motivosOcultos = [];
+
+// Lista plana dos motivos padrão, usada por validações e pelos rankings
 const MOTIVOS_FLAT = MOTIVOS_PADRAO.flatMap(g => g.itens);
 
-// Todos os motivos conhecidos (padrão + personalizados)
-const getTodosMotivos = () => [...MOTIVOS_FLAT, ...motivosCustom];
+// Grupos padrão, na ordem de exibição. "Outro" fica sempre por último.
+const GRUPOS_PADRAO = MOTIVOS_PADRAO.map(g => g.grupo).filter(g => g !== 'Outro');
+
+// Compatibilidade: versões antigas salvavam motivosCustom como array de strings.
+// Normaliza para o formato { nome, grupo } sem perder nada.
+function normalizarMotivosCustom(arr) {
+  return (Array.isArray(arr) ? arr : []).map(m => {
+    if (typeof m === 'string') return { nome: m, grupo: 'Outro' };
+    return { nome: String(m?.nome ?? ''), grupo: String(m?.grupo || 'Outro') };
+  }).filter(m => m.nome);
+}
+
+// Todas as categorias conhecidas, na ordem de exibição
+const getTodasCategorias = () => [...GRUPOS_PADRAO, ...categoriasCustom, 'Outro'];
+
+// Todos os motivos conhecidos (padrão + personalizados), como texto
+const getTodosMotivos = () => [...MOTIVOS_FLAT, ...motivosCustom.map(m => m.nome)];
+
+// Motivos de uma categoria, marcando origem e visibilidade
+function getMotivosDoGrupo(grupo) {
+  const padrao = (MOTIVOS_PADRAO.find(g => g.grupo === grupo)?.itens || [])
+    .map(nome => ({ nome, grupo, custom: false, oculto: motivosOcultos.includes(nome) }));
+  const custom = motivosCustom
+    .filter(m => m.grupo === grupo)
+    .map(m => ({ nome: m.nome, grupo, custom: true, oculto: false }));
+  return [...padrao, ...custom];
+}
+
+// Quantas paradas + justificativas usam um motivo (para avisar antes de remover)
+function contarUsosMotivo(nome) {
+  const paradas = paradasRecords.filter(r => r.motivo === nome).length;
+  let justif = 0;
+  Object.values(dashJustif || {}).forEach(raw => {
+    if (parseJustif(raw).motivo === nome) justif++;
+  });
+  return { paradas, justif, total: paradas + justif };
+}
 
 const ALL_AREAS_PARADA = [
   { id: 'todas', name: 'Todas as áreas' },
@@ -3155,94 +3305,87 @@ function setupFiltrosParadas() {
 
 // Abre a memória de cálculo da perda de uma parada
 // Mostra o campo de texto livre quando o motivo é "Outro"
-// Modal para criar/remover motivos personalizados
+// ================================================================
+//  MOTIVOS — cadastro rápido (a partir do formulário de parada)
+// ================================================================
+
+// Modal enxuto para adicionar um motivo sem sair do registro de parada.
+// A administração completa fica na página "Motivos".
 function gerenciarMotivos() {
   const ov = document.createElement('div');
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,27,53,.45);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px';
   ov.onclick = (e) => { if (e.target === ov) fecharGerenciarMotivos(ov); };
 
+  const catOptions = getTodasCategorias()
+    .map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+
   ov.innerHTML = `
-    <div style="background:var(--bg-card);border-radius:12px;padding:24px;max-width:460px;width:100%;max-height:85vh;overflow:auto">
-      <h3 style="margin:0 0 4px;font-size:16px;color:var(--text-primary)">Meus motivos</h3>
+    <div style="background:var(--bg-card);border-radius:var(--radius-lg);padding:24px;max-width:440px;width:100%;box-shadow:var(--shadow-lg)">
+      <h3 style="margin:0 0 4px;font-size:16px;color:var(--text-primary)">Novo motivo</h3>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">
-        Motivos criados por você. Os motivos padrão do sistema não aparecem aqui e não podem ser removidos.
+        Escolha a categoria para o motivo entrar no lugar certo na Árvore de Perdas.
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:16px">
-        <input type="text" id="novo-motivo" placeholder="Nome do novo motivo" maxlength="60"
+
+      <label class="filter-label" style="display:block;margin-bottom:6px">Categoria</label>
+      <select id="novo-motivo-cat"
+        style="width:100%;background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+          padding:9px 12px;border-radius:8px;font-size:13px;outline:none;font-family:var(--font-display);margin-bottom:14px">
+        ${catOptions}
+      </select>
+
+      <label class="filter-label" style="display:block;margin-bottom:6px">Nome do motivo</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="novo-motivo" placeholder="Ex.: Falta de fita adesiva" maxlength="60"
           onkeydown="if(event.key==='Enter'){event.preventDefault();adicionarMotivo();}"
           style="flex:1;background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
-            padding:9px 12px;border-radius:8px;font-size:13px;outline:none">
+            padding:9px 12px;border-radius:8px;font-size:13px;outline:none;font-family:var(--font-display)">
         <button onclick="adicionarMotivo()"
           style="background:var(--cyan);border:none;color:#fff;padding:9px 16px;border-radius:8px;
-            font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">Adicionar</button>
+            font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:var(--font-display)">Adicionar</button>
       </div>
-      <div id="lista-motivos"></div>
-      <button onclick="fecharGerenciarMotivos(this.closest('div[style*=fixed]'))"
-        style="margin-top:18px;background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
-          padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer">Fechar</button>
+
+      <div id="novo-motivo-feedback" style="font-size:12px;margin-top:10px;min-height:16px"></div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px">
+        <span onclick="fecharGerenciarMotivos(this.closest('div[style*=fixed]'));irParaMotivos()"
+          style="cursor:pointer;font-size:12px;color:var(--cyan);text-decoration:underline">
+          administrar lista completa
+        </span>
+        <button onclick="fecharGerenciarMotivos(this.closest('div[style*=fixed]'))"
+          style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+            padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font-display)">Fechar</button>
+      </div>
     </div>`;
 
   document.body.appendChild(ov);
-  renderListaMotivos();
   document.getElementById('novo-motivo')?.focus();
 }
 
-function renderListaMotivos() {
-  const box = document.getElementById('lista-motivos');
-  if (!box) return;
-  if (!motivosCustom.length) {
-    box.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">
-      Nenhum motivo personalizado ainda.</div>`;
-    return;
-  }
-  box.innerHTML = motivosCustom.map((m, i) => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;
-      border:1px solid var(--border-light);border-radius:8px;margin-bottom:6px">
-      <span style="font-size:13px;color:var(--text-primary)">${esc(m)}</span>
-      <span onclick="removerMotivo(${i})" title="Remover"
-        style="cursor:pointer;color:var(--red);font-size:16px;line-height:1;padding:0 4px">×</span>
-    </div>`).join('');
-}
-
+// Cria um motivo personalizado a partir do modal rápido
 async function adicionarMotivo() {
   const inp = document.getElementById('novo-motivo');
-  const nome = inp?.value.trim();
-  if (!nome) return;
+  const sel = document.getElementById('novo-motivo-cat');
+  const fb  = document.getElementById('novo-motivo-feedback');
+  const nome  = inp?.value.trim();
+  const grupo = sel?.value || 'Outro';
+  if (!fb) return;
 
+  if (!nome) { fb.innerHTML = `<span style="color:var(--red)">Informe o nome do motivo.</span>`; return; }
   if (getTodosMotivos().some(m => m.toLowerCase() === nome.toLowerCase())) {
-    alert('Esse motivo já existe na lista.');
+    fb.innerHTML = `<span style="color:var(--red)">Esse motivo já existe na lista.</span>`;
     return;
   }
 
   const anterior = [...motivosCustom];
-  motivosCustom.push(nome);
+  motivosCustom.push({ nome, grupo });
   try {
     await DB.saveMotivos(motivosCustom);
     inp.value = '';
-    renderListaMotivos();
+    inp.focus();
+    fb.innerHTML = `<span style="color:var(--green)">"${esc(nome)}" adicionado em ${esc(grupo)}.</span>`;
   } catch (e) {
     motivosCustom = anterior;
-    alert('Erro ao salvar motivo: ' + e.message);
-  }
-}
-
-async function removerMotivo(i) {
-  const nome = motivosCustom[i];
-  // Paradas já registradas guardam o texto do motivo, então não são afetadas
-  const emUso = paradasRecords.filter(r => r.motivo === nome).length;
-  const aviso = emUso
-    ? `\n\n${emUso} parada(s) já usam esse motivo. Elas continuam com o registro intacto, mas o motivo sai da lista de opções.`
-    : '';
-  if (!confirm(`Remover "${nome}" da lista?${aviso}`)) return;
-
-  const anterior = [...motivosCustom];
-  motivosCustom.splice(i, 1);
-  try {
-    await DB.saveMotivos(motivosCustom);
-    renderListaMotivos();
-  } catch (e) {
-    motivosCustom = anterior;
-    alert('Erro ao remover motivo: ' + e.message);
+    fb.innerHTML = `<span style="color:var(--red)">Erro ao salvar: ${esc(e.message)}</span>`;
   }
 }
 
@@ -3269,19 +3412,375 @@ function fecharGerenciarMotivos(ov) {
   }
 }
 
-// Monta as options agrupadas do select de motivos
-function buildMotivosOptions(selecionado) {
-  const grupoCustom = motivosCustom.length
-    ? `<optgroup label="Meus motivos">` +
-      motivosCustom.map(m => `<option value="${esc(m)}" ${selecionado === m ? 'selected' : ''}>${esc(m)}</option>`).join('') +
-      `</optgroup>`
-    : '';
+// ================================================================
+//  PÁGINA MOTIVOS — administração por categoria
+// ================================================================
+const motCatFechadas = new Set();
+let editandoMotivo = null;   // { nome, grupo } do motivo em edição
 
-  return MOTIVOS_PADRAO.map(g =>
-    `<optgroup label="${g.grupo}">` +
-    g.itens.map(m => `<option value="${esc(m)}" ${selecionado === m ? 'selected' : ''}>${esc(m)}</option>`).join('') +
-    `</optgroup>`
-  ).join('') + grupoCustom;
+// Navega para a página Motivos pelo botão da sidebar
+function irParaMotivos() {
+  document.querySelector('.nav-btn[data-page="motivos"]')?.click();
+}
+
+function toggleMotCat(grupo) {
+  if (motCatFechadas.has(grupo)) motCatFechadas.delete(grupo);
+  else motCatFechadas.add(grupo);
+  renderMotivos();
+}
+
+function renderMotivos() {
+  const box = document.getElementById('mot-content');
+  if (!box) return;
+
+  const busca = (document.getElementById('mot-busca')?.value || '').trim().toLowerCase();
+  const mostrarOcultos = !!document.getElementById('mot-mostrar-ocultos')?.checked;
+
+  // KPIs
+  const totalAtivos = getTodosMotivos().filter(m => !motivosOcultos.includes(m)).length;
+  const setId = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setId('mot-kpi-total',   fmt(totalAtivos));
+  setId('mot-kpi-cats',    fmt(getTodasCategorias().length));
+  setId('mot-kpi-custom',  fmt(motivosCustom.length));
+  setId('mot-kpi-ocultos', fmt(motivosOcultos.length));
+
+  const cores = ['var(--cyan)','var(--purple)','var(--green)','var(--yellow)','var(--orange)','var(--red)'];
+
+  const blocos = getTodasCategorias().map((grupo, idx) => {
+    const ehCustom = categoriasCustom.includes(grupo);
+    const cor = ehCustom ? 'var(--green)' : cores[idx % cores.length];
+
+    let itens = getMotivosDoGrupo(grupo);
+    if (!mostrarOcultos) itens = itens.filter(m => !m.oculto);
+    if (busca) itens = itens.filter(m => m.nome.toLowerCase().includes(busca));
+
+    // Com busca ativa, categorias sem resultado somem
+    if (busca && !itens.length) return '';
+
+    const fechada = motCatFechadas.has(grupo) && !busca;
+    const qtdAtivos = getMotivosDoGrupo(grupo).filter(m => !m.oculto).length;
+
+    const linhas = itens.length ? itens.map(m => {
+      const usos = contarUsosMotivo(m.nome);
+      const usoTxt = usos.total
+        ? `<span style="font-size:11px;color:var(--text-muted)">${usos.total} uso(s)</span>`
+        : '';
+
+      const tag = m.custom
+        ? `<span style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;
+             background:var(--green-dim);color:var(--green);padding:2px 8px;border-radius:10px">meu</span>`
+        : `<span style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;
+             background:var(--bg-hover);color:var(--text-muted);padding:2px 8px;border-radius:10px">padrão</span>`;
+
+      const acoes = m.custom
+        ? `<button onclick="abrirModalMotivo('${jsAttr(m.nome)}')" title="Editar"
+             style="background:none;border:1px solid var(--border-light);color:var(--text-secondary);
+               padding:4px 9px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--font-display)">✏️</button>
+           <button onclick="removerMotivo('${jsAttr(m.nome)}')" title="Remover"
+             style="background:none;border:1px solid var(--border-light);color:var(--red);
+               padding:4px 9px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--font-display)">🗑️</button>`
+        : `<button onclick="toggleOcultarMotivo('${jsAttr(m.nome)}')"
+             title="${m.oculto ? 'Reexibir na lista' : 'Ocultar da lista'}"
+             style="background:none;border:1px solid var(--border-light);color:var(--text-secondary);
+               padding:4px 9px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--font-display)">
+             ${m.oculto ? '👁️' : '🚫'}</button>`;
+
+      return `
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 20px;border-bottom:1px solid var(--border-light);
+          ${m.oculto ? 'opacity:.5' : ''}">
+          <span style="flex:1;font-size:13.5px;color:var(--text-primary);
+            ${m.oculto ? 'text-decoration:line-through' : ''}">${esc(m.nome)}</span>
+          ${usoTxt}
+          ${tag}
+          <div style="display:flex;gap:6px">${acoes}</div>
+        </div>`;
+    }).join('') : `
+      <div style="padding:22px 20px;text-align:center;color:var(--text-muted);font-size:13px">
+        Nenhum motivo nesta categoria.
+      </div>`;
+
+    const btnExcluirCat = ehCustom
+      ? `<button onclick="event.stopPropagation();removerCategoria('${jsAttr(grupo)}')"
+           title="Excluir categoria"
+           style="background:none;border:1px solid var(--border-light);color:var(--red);
+             padding:4px 9px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--font-display)">🗑️</button>`
+      : '';
+
+    return `
+      <div class="table-card">
+        <div class="table-card-header" style="cursor:pointer;border-left:4px solid ${cor}"
+          onclick="toggleMotCat('${jsAttr(grupo)}')">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:var(--text-muted);font-size:12px">${fechada ? '▶' : '▼'}</span>
+            <span class="table-card-title" style="color:${cor}">${esc(grupo)}</span>
+            <span style="font-size:11px;color:var(--text-muted)">${qtdAtivos} motivo(s)</span>
+            ${ehCustom ? `<span style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;
+              background:var(--green-dim);color:var(--green);padding:2px 8px;border-radius:10px">minha</span>` : ''}
+          </div>
+          <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
+            <button onclick="abrirModalMotivo(null,'${jsAttr(grupo)}')"
+              style="background:none;border:1px solid var(--cyan);color:var(--cyan);
+                padding:4px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;
+                font-family:var(--font-display)">+ motivo</button>
+            ${btnExcluirCat}
+          </div>
+        </div>
+        ${fechada ? '' : `<div>${linhas}</div>`}
+      </div>`;
+  }).join('');
+
+  box.innerHTML = blocos || `
+    <div class="table-card" style="padding:40px;text-align:center;color:var(--text-muted)">
+      Nenhum motivo encontrado para "${esc(busca)}".
+    </div>`;
+}
+
+// ---------- CRUD de motivos personalizados ----------
+
+function abrirModalMotivo(nome = null, grupoPadrao = null) {
+  const rec = nome ? motivosCustom.find(m => m.nome === nome) : null;
+  editandoMotivo = rec ? { ...rec } : null;
+
+  const catOptions = getTodasCategorias().map(c =>
+    `<option value="${esc(c)}" ${(rec?.grupo || grupoPadrao) === c ? 'selected' : ''}>${esc(c)}</option>`
+  ).join('');
+
+  const ov = document.createElement('div');
+  ov.id = 'modal-motivo-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,27,53,.45);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px';
+  ov.onclick = (e) => { if (e.target === ov) fecharModalMotivo(); };
+
+  ov.innerHTML = `
+    <div style="background:var(--bg-card);border-radius:var(--radius-lg);padding:24px;max-width:440px;width:100%;box-shadow:var(--shadow-lg)">
+      <h3 style="margin:0 0 16px;font-size:16px;color:var(--text-primary)">
+        ${rec ? '✏️ Editar motivo' : '🏷️ Novo motivo'}
+      </h3>
+
+      <label class="filter-label" style="display:block;margin-bottom:6px">Nome <span style="color:var(--red)">*</span></label>
+      <input type="text" id="mot-form-nome" maxlength="60" value="${esc(rec?.nome || '')}"
+        placeholder="Ex.: Falta de fita adesiva"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();salvarMotivo();}"
+        style="width:100%;background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+          padding:10px 14px;border-radius:8px;font-size:14px;outline:none;font-family:var(--font-display);margin-bottom:14px">
+
+      <label class="filter-label" style="display:block;margin-bottom:6px">Categoria <span style="color:var(--red)">*</span></label>
+      <select id="mot-form-cat"
+        style="width:100%;background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+          padding:10px 14px;border-radius:8px;font-size:14px;outline:none;font-family:var(--font-display)">
+        ${catOptions}
+      </select>
+
+      <div id="mot-form-feedback" style="font-size:12px;margin-top:10px;min-height:16px"></div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
+        <button onclick="fecharModalMotivo()"
+          style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+            padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font-display)">Cancelar</button>
+        <button onclick="salvarMotivo()"
+          style="background:var(--cyan);border:none;color:#fff;padding:10px 22px;border-radius:8px;
+            font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-display)">💾 Salvar</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(ov);
+  document.getElementById('mot-form-nome')?.focus();
+}
+
+function fecharModalMotivo() {
+  document.getElementById('modal-motivo-overlay')?.remove();
+  editandoMotivo = null;
+}
+
+async function salvarMotivo() {
+  const nome  = document.getElementById('mot-form-nome')?.value.trim();
+  const grupo = document.getElementById('mot-form-cat')?.value || 'Outro';
+  const fb    = document.getElementById('mot-form-feedback');
+  const erro  = (msg) => { if (fb) fb.innerHTML = `<span style="color:var(--red)">${esc(msg)}</span>`; };
+
+  if (!nome) return erro('Informe o nome do motivo.');
+
+  // Duplicidade: ignora o próprio registro quando está editando
+  const duplicado = getTodosMotivos().some(m =>
+    m.toLowerCase() === nome.toLowerCase() && m !== editandoMotivo?.nome);
+  if (duplicado) return erro('Já existe um motivo com esse nome.');
+
+  const anterior = motivosCustom.map(m => ({ ...m }));
+  if (editandoMotivo) {
+    const i = motivosCustom.findIndex(m => m.nome === editandoMotivo.nome);
+    if (i >= 0) motivosCustom[i] = { nome, grupo };
+  } else {
+    motivosCustom.push({ nome, grupo });
+  }
+
+  try {
+    await DB.saveMotivos(motivosCustom);
+    fecharModalMotivo();
+    renderMotivos();
+  } catch (e) {
+    motivosCustom = anterior;
+    erro('Erro ao salvar: ' + e.message);
+  }
+}
+
+async function removerMotivo(nome) {
+  const usos = contarUsosMotivo(nome);
+  // Registros antigos guardam o texto do motivo, então não são afetados
+  const aviso = usos.total
+    ? `\n\n${usos.total} registro(s) já usam esse motivo (${usos.paradas} parada(s), ${usos.justif} justificativa(s)). ` +
+      `Eles continuam intactos, mas o motivo sai da lista de opções.`
+    : '';
+  if (!confirm(`Remover "${nome}" da lista?${aviso}`)) return;
+
+  const anterior = motivosCustom.map(m => ({ ...m }));
+  motivosCustom = motivosCustom.filter(m => m.nome !== nome);
+  try {
+    await DB.saveMotivos(motivosCustom);
+    renderMotivos();
+  } catch (e) {
+    motivosCustom = anterior;
+    alert('Erro ao remover motivo: ' + e.message);
+  }
+}
+
+// Motivos padrão não são apagados — só saem (ou voltam) da lista de seleção
+async function toggleOcultarMotivo(nome) {
+  const anterior = [...motivosOcultos];
+  if (motivosOcultos.includes(nome)) motivosOcultos = motivosOcultos.filter(m => m !== nome);
+  else motivosOcultos.push(nome);
+
+  try {
+    await DB.saveMotivosOcultos(motivosOcultos);
+    renderMotivos();
+  } catch (e) {
+    motivosOcultos = anterior;
+    alert('Erro ao salvar: ' + e.message);
+  }
+}
+
+// ---------- CRUD de categorias personalizadas ----------
+
+function abrirModalCategoria() {
+  const ov = document.createElement('div');
+  ov.id = 'modal-cat-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,27,53,.45);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px';
+  ov.onclick = (e) => { if (e.target === ov) fecharModalCategoria(); };
+
+  ov.innerHTML = `
+    <div style="background:var(--bg-card);border-radius:var(--radius-lg);padding:24px;max-width:420px;width:100%;box-shadow:var(--shadow-lg)">
+      <h3 style="margin:0 0 4px;font-size:16px;color:var(--text-primary)">📁 Nova categoria</h3>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">
+        A categoria vira um agrupamento na lista de motivos e na Árvore de Perdas.
+      </div>
+
+      <input type="text" id="cat-form-nome" maxlength="40" placeholder="Ex.: Qualidade"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();salvarCategoria();}"
+        style="width:100%;background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+          padding:10px 14px;border-radius:8px;font-size:14px;outline:none;font-family:var(--font-display)">
+
+      <div id="cat-form-feedback" style="font-size:12px;margin-top:10px;min-height:16px"></div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
+        <button onclick="fecharModalCategoria()"
+          style="background:var(--bg-input);border:1px solid var(--border-light);color:var(--text-primary);
+            padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font-display)">Cancelar</button>
+        <button onclick="salvarCategoria()"
+          style="background:var(--cyan);border:none;color:#fff;padding:10px 22px;border-radius:8px;
+            font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-display)">💾 Criar</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(ov);
+  document.getElementById('cat-form-nome')?.focus();
+}
+
+function fecharModalCategoria() {
+  document.getElementById('modal-cat-overlay')?.remove();
+}
+
+async function salvarCategoria() {
+  const nome = document.getElementById('cat-form-nome')?.value.trim();
+  const fb   = document.getElementById('cat-form-feedback');
+  const erro = (msg) => { if (fb) fb.innerHTML = `<span style="color:var(--red)">${esc(msg)}</span>`; };
+
+  if (!nome) return erro('Informe o nome da categoria.');
+  if (getTodasCategorias().some(c => c.toLowerCase() === nome.toLowerCase())) {
+    return erro('Já existe uma categoria com esse nome.');
+  }
+
+  const anterior = [...categoriasCustom];
+  categoriasCustom.push(nome);
+  try {
+    await DB.saveCategorias(categoriasCustom);
+    fecharModalCategoria();
+    renderMotivos();
+  } catch (e) {
+    categoriasCustom = anterior;
+    erro('Erro ao salvar: ' + e.message);
+  }
+}
+
+// Excluir categoria move seus motivos para "Outro" — nenhum motivo é perdido
+async function removerCategoria(nome) {
+  const afetados = motivosCustom.filter(m => m.grupo === nome);
+  const aviso = afetados.length
+    ? `\n\n${afetados.length} motivo(s) desta categoria serão movidos para "Outro".`
+    : '';
+  if (!confirm(`Excluir a categoria "${nome}"?${aviso}`)) return;
+
+  const catAnterior = [...categoriasCustom];
+  const motAnterior = motivosCustom.map(m => ({ ...m }));
+
+  categoriasCustom = categoriasCustom.filter(c => c !== nome);
+  motivosCustom = motivosCustom.map(m => m.grupo === nome ? { ...m, grupo: 'Outro' } : m);
+
+  try {
+    await DB.saveCategorias(categoriasCustom);
+    if (afetados.length) await DB.saveMotivos(motivosCustom);
+    renderMotivos();
+  } catch (e) {
+    categoriasCustom = catAnterior;
+    motivosCustom = motAnterior;
+    alert('Erro ao excluir categoria: ' + e.message);
+  }
+}
+
+function exportMotivosCSV() {
+  const linhas = [['Categoria', 'Motivo', 'Origem', 'Status', 'Usos']];
+  getTodasCategorias().forEach(grupo => {
+    getMotivosDoGrupo(grupo).forEach(m => {
+      linhas.push([
+        grupo,
+        m.nome,
+        m.custom ? 'Personalizado' : 'Padrão',
+        m.oculto ? 'Oculto' : 'Ativo',
+        String(contarUsosMotivo(m.nome).total),
+      ]);
+    });
+  });
+
+  const csv = linhas.map(l => l.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'motivos.csv';
+  a.click();
+}
+
+// Monta as options agrupadas do select de motivos.
+// Motivos personalizados aparecem dentro da categoria a que pertencem.
+// Motivos ocultados somem da lista, exceto se forem o valor já selecionado
+// (senão editar um registro antigo perderia o motivo original).
+function buildMotivosOptions(selecionado) {
+  return getTodasCategorias().map(grupo => {
+    const itens = getMotivosDoGrupo(grupo)
+      .filter(m => !m.oculto || m.nome === selecionado);
+    if (!itens.length) return '';
+    return `<optgroup label="${esc(grupo)}">` +
+      itens.map(m =>
+        `<option value="${esc(m.nome)}" ${selecionado === m.nome ? 'selected' : ''}>${esc(m.nome)}</option>`
+      ).join('') +
+      `</optgroup>`;
+  }).join('');
 }
 
 function toggleMotivoOutro() {
@@ -3548,7 +4047,9 @@ const GRUPOS_ARVORE = [
 // livre caem em "Outro", que é onde a investigação começa.
 function getCategoriaMotivo(motivo) {
   const g = MOTIVOS_PADRAO.find(g => g.itens.includes(motivo));
-  return g ? g.grupo : 'Outro';
+  if (g) return g.grupo;
+  const c = motivosCustom.find(m => m.nome === motivo);
+  return c ? c.grupo : 'Outro';
 }
 
 // Datas do período que têm capacidade E produção registradas.
@@ -3847,6 +4348,10 @@ Object.assign(window, {
   renderConfig, updateConfigPreview, saveConfig, resetConfig,
   abrirModalParada, fecharModalParada, atualizarDuracao, salvarParada, toggleMotivoOutro,
   gerenciarMotivos, adicionarMotivo, removerMotivo, fecharGerenciarMotivos,
+  renderMotivos, toggleMotCat, irParaMotivos,
+  abrirModalMotivo, fecharModalMotivo, salvarMotivo, toggleOcultarMotivo,
+  abrirModalCategoria, fecharModalCategoria, salvarCategoria, removerCategoria,
+  exportMotivosCSV,
   renderArvore, toggleArvCat, exportArvoreCSV,
   editarParada, deletarParada, exportParadasCSV, renderParadas, verDetalhePerda,
 });
