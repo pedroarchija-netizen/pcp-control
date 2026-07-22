@@ -920,6 +920,160 @@ const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ================================================================
+//  DIAGNÓSTICO DE CONEXÃO
+// ================================================================
+// Antes, todo get* engolia o erro e devolvia vazio, e vários save*
+// nem olhavam o retorno. Resultado: com a chave recusada o app abria
+// "funcionando" e só quebrava no primeiro save que checava erro —
+// o de paradas. Agora qualquer falha aparece na tela na hora.
+
+// Traduz os erros mais comuns do Supabase para algo acionável
+function explicarErroDB(msg) {
+  const m = String(msg || '').toLowerCase();
+  if (m.includes('no api key') || m.includes('nenhuma chave de api'))
+    return 'A requisição chegou ao Supabase sem a chave de API. Verifique se SUPABASE_KEY no topo do arquivo está completa (a chave é longa e não pode ter quebra de linha) e se a chave legada JWT ainda está habilitada no projeto.';
+  if (m.includes('invalid api key') || m.includes('jwt'))
+    return 'O Supabase recusou a chave. Ela pode ter sido rotacionada ou as chaves legadas do projeto foram desativadas. Pegue a chave atual em Project Settings → API Keys.';
+  if (m.includes('row-level security') || m.includes('row level security'))
+    return 'RLS está bloqueando a operação. Falta uma policy que permita esta ação para o papel anon nesta tabela.';
+  if (m.includes('failed to fetch') || m.includes('networkerror'))
+    return 'Não foi possível alcançar o Supabase. Verifique a internet ou se o projeto não está pausado.';
+  if (m.includes('does not exist') || m.includes('schema cache'))
+    return 'A tabela ou coluna não existe no banco. Confira o schema no Supabase.';
+  return null;
+}
+
+let dbBannerAtivo = false;
+// Guarda o último erro completo para inspeção no console: ultimoErroPCP
+window.ultimoErroPCP = null;
+
+function mostrarErroDB(op, msg, erroCompleto) {
+  console.error(`[DB] ${op}:`, erroCompleto || msg);
+  window.ultimoErroPCP = {
+    operacao: op,
+    mensagem: msg,
+    erro: erroCompleto || null,
+    quando: new Date().toISOString(),
+    online: navigator.onLine,
+  };
+  const dica = explicarErroDB(msg);
+
+  let el = document.getElementById('db-erro-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'db-erro-banner';
+    el.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:99999;
+      background:var(--red);color:#fff;padding:12px 18px;font-family:var(--font-display);
+      font-size:13px;line-height:1.5;box-shadow:0 2px 14px rgba(0,0,0,.25)`;
+    document.body.appendChild(el);
+  }
+  dbBannerAtivo = true;
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:12px;max-width:1100px;margin:0 auto">
+      <span style="font-size:16px;line-height:1.2">⚠</span>
+      <div style="flex:1">
+        <strong>Falha ao falar com o banco (${esc(op)})</strong>
+        <div style="opacity:.92;margin-top:3px">${esc(msg)}</div>
+        ${dica ? `<div style="opacity:.92;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.3)">${esc(dica)}</div>` : ''}
+      </div>
+      <button onclick="this.closest('#db-erro-banner').remove()"
+        style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 12px;
+          border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit">Fechar</button>
+    </div>`;
+}
+
+// Usado nos get*: registra o erro e devolve true para o chamador cair no default
+function erroDB(op, error) {
+  if (!error) return false;
+  mostrarErroDB(op, error.message || String(error), error);
+  return true;
+}
+
+// Usado nos save*: registra e propaga, para o chamador não achar que salvou
+function exigirOk(op, error) {
+  if (!error) return;
+  mostrarErroDB(op, error.message || String(error), error);
+  throw new Error(error.message || String(error));
+}
+
+// Falhas de rede são intermitentes — no seu log apareceu ERR_INTERNET_DISCONNECTED
+// e a requisição seguinte passou. Vale tentar de novo antes de dar erro na cara do usuário.
+async function comRetentativa(op, fn, tentativas = 3) {
+  let ultimo;
+  for (let i = 1; i <= tentativas; i++) {
+    try {
+      const r = await fn();
+      if (!r?.error) return r;
+      ultimo = r.error;
+      // Só repete se for falha de transporte; erro de dados não melhora tentando de novo
+      const m = String(ultimo.message || '').toLowerCase();
+      if (!m.includes('fetch') && !m.includes('network') && !m.includes('timeout')) return r;
+    } catch (e) {
+      ultimo = e;
+    }
+    if (i < tentativas) {
+      console.warn(`[DB] ${op}: tentativa ${i} falhou, repetindo…`, ultimo?.message || ultimo);
+      await new Promise(r => setTimeout(r, 400 * i));
+    }
+  }
+  return { error: ultimo };
+}
+
+// Ping leve na abertura: pega a chave recusada antes de o usuário digitar qualquer coisa
+async function testarConexaoDB() {
+  const { error } = await supabase.from('paradas').select('id').limit(1);
+  if (error) { mostrarErroDB('conexão', error.message || String(error)); return false; }
+  return true;
+}
+
+// Diagnóstico completo, para rodar no console: diagnosticoPCP()
+// Testa leitura em todas as tabelas e faz uma escrita real em paradas,
+// que é o caminho exato que estava dando erro.
+async function diagnosticoPCP() {
+  const linha = (a, b) => console.log(`  ${String(a).padEnd(18)} ${b}`);
+
+  console.log('%c=== DIAGNÓSTICO PCP ===', 'font-weight:bold;font-size:13px');
+  linha('URL', SUPABASE_URL);
+  linha('Chave', SUPABASE_KEY ? `presente, ${SUPABASE_KEY.length} caracteres` : 'AUSENTE');
+  linha('Formato', SUPABASE_KEY?.startsWith('eyJ') ? 'JWT legado (anon)'
+        : SUPABASE_KEY?.startsWith('sb_') ? 'chave nova (publishable)' : 'não reconhecido');
+  if (/\s/.test(SUPABASE_KEY || '')) {
+    console.warn('  ⚠ A chave contém espaço ou quebra de linha — provavelmente foi cortada ao colar.');
+  }
+
+  console.log('\n  LEITURA:');
+  for (const t of ['capacity', 'production', 'justificativas', 'metas', 'configuracoes', 'paradas']) {
+    const { error, count } = await supabase.from(t).select('*', { count: 'exact', head: true });
+    linha(t, error ? `❌ ${error.message}` : `✅ ${count} registro(s)`);
+  }
+
+  console.log('\n  ESCRITA (paradas):');
+  // id precisa ser numérico: a coluna paradas.id é bigint, e o app grava Date.now()
+  const idTeste = Date.now();
+  const teste = {
+    id: idTeste, date: '01/01/2000', motivo: 'TESTE DIAGNOSTICO',
+    inicio: '00:00', fim: '00:01', duracao: 1, obs: 'registro temporario', areas: [],
+  };
+  const { error: eIns } = await supabase.from('paradas').upsert(teste, { onConflict: 'id' });
+  if (eIns) {
+    linha('insert', `❌ ${eIns.message}`);
+    console.log('  detalhe:', eIns);
+    const dica = explicarErroDB(eIns.message);
+    if (dica) console.log(`\n  → ${dica}`);
+  } else {
+    linha('insert', '✅ ok');
+    const { error: eDel } = await supabase.from('paradas').delete().eq('id', idTeste);
+    linha('delete', eDel ? `❌ ${eDel.message}` : '✅ ok (registro de teste removido)');
+    console.log('\n  Gravação funcionando pelo console.');
+    console.log('  Agora salve uma parada pela tela. Se der erro, rode: ultimoErroPCP');
+  }
+}
+window.diagnosticoPCP = diagnosticoPCP;
+window.SUPABASE_KEY = SUPABASE_KEY;
+window.SUPABASE_URL = SUPABASE_URL;
+window.supabase = supabase;
+
+// ================================================================
 //  DATA LAYER — Supabase
 // ================================================================
 const DB = {
@@ -929,7 +1083,7 @@ const DB = {
       .from('capacity')
       .select('*')
       .order('date', { ascending: false });
-    if (error) { console.error('getCapacity:', error); return []; }
+    if (erroDB('getCapacity', error)) return [];
     return (data || []).map(r => ({
       id: r.id, date: r.date, colaboradores: r.colaboradores,
       inbound: r.inbound, outbound: r.outbound,
@@ -939,16 +1093,18 @@ const DB = {
   },
   saveCapacity: async (records) => {
     for (const r of records) {
-      await supabase.from('capacity').upsert({
+      const { error } = await supabase.from('capacity').upsert({
         id: r.id, date: r.date, colaboradores: r.colaboradores,
         inbound: r.inbound, outbound: r.outbound,
         red_carpet: r.redCarpet, total: r.total,
         areas: r.areas || {},
       }, { onConflict: 'id' });
+      exigirOk('saveCapacity', error);
     }
   },
   deleteCapacity: async (id) => {
-    await supabase.from('capacity').delete().eq('id', id);
+    const { error } = await supabase.from('capacity').delete().eq('id', id);
+    exigirOk('deleteCapacity', error);
   },
 
   // ---- PRODUCTION ----
@@ -957,62 +1113,68 @@ const DB = {
       .from('production')
       .select('*')
       .order('date', { ascending: false });
-    if (error) { console.error('getProduction:', error); return []; }
+    if (erroDB('getProduction', error)) return [];
     return (data || []).map(r => ({ id: r.id, date: r.date, areas: r.areas || {} }));
   },
   saveProduction: async (records) => {
     for (const r of records) {
-      await supabase.from('production').upsert(
+      const { error } = await supabase.from('production').upsert(
         { id: r.id, date: r.date, areas: r.areas || {} },
         { onConflict: 'id' }
       );
+      exigirOk('saveProduction', error);
     }
   },
 
   // ---- JUSTIFICATIVAS ----
   getJustif: async () => {
     const { data, error } = await supabase.from('justificativas').select('*');
-    if (error) { console.error('getJustif:', error); return {}; }
+    if (erroDB('getJustif', error)) return {};
     const obj = {};
     (data || []).forEach(r => { obj[r.key] = r.value; });
     return obj;
   },
   saveJustif: async (obj) => {
     const rows = Object.entries(obj).map(([key, value]) => ({ key, value }));
-    if (rows.length) await supabase.from('justificativas').upsert(rows, { onConflict: 'key' });
+    if (!rows.length) return;
+    const { error } = await supabase.from('justificativas').upsert(rows, { onConflict: 'key' });
+    exigirOk('saveJustif', error);
   },
 
   // ---- METAS ----
   getMetas: async () => {
     const { data, error } = await supabase.from('metas').select('*');
-    if (error) { console.error('getMetas:', error); return {}; }
+    if (erroDB('getMetas', error)) return {};
     const obj = {};
     (data || []).forEach(r => { obj[r.key] = r.data; });
     return obj;
   },
   saveMetas: async (obj) => {
     const rows = Object.entries(obj).map(([key, data]) => ({ key, data }));
-    if (rows.length) await supabase.from('metas').upsert(rows, { onConflict: 'key' });
+    if (!rows.length) return;
+    const { error } = await supabase.from('metas').upsert(rows, { onConflict: 'key' });
+    exigirOk('saveMetas', error);
   },
 
   // ---- CONFIG ----
   getConfig: async () => {
     const { data, error } = await supabase
-      .from('configuracoes').select('*').eq('key', 'areas_pdia').single();
+      .from('configuracoes').select('*').eq('key', 'areas_pdia').maybeSingle();
     if (error || !data) return {};
     return data.value || {};
   },
   saveConfig: async (obj) => {
-    await supabase.from('configuracoes').upsert(
+    const { error } = await supabase.from('configuracoes').upsert(
       { key: 'areas_pdia', value: obj },
       { onConflict: 'key' }
     );
+    exigirOk('saveConfig', error);
   },
 
   // ---- MOTIVOS PERSONALIZADOS ----
   getMotivos: async () => {
     const { data, error } = await supabase
-      .from('configuracoes').select('*').eq('key', 'motivos_custom').single();
+      .from('configuracoes').select('*').eq('key', 'motivos_custom').maybeSingle();
     if (error || !data) return [];
     return Array.isArray(data.value) ? data.value : [];
   },
@@ -1021,13 +1183,13 @@ const DB = {
       { key: 'motivos_custom', value: arr },
       { onConflict: 'key' }
     );
-    if (error) throw new Error(error.message);
+    exigirOk('saveMotivos', error);
   },
 
   // ---- CATEGORIAS PERSONALIZADAS ----
   getCategorias: async () => {
     const { data, error } = await supabase
-      .from('configuracoes').select('*').eq('key', 'categorias_custom').single();
+      .from('configuracoes').select('*').eq('key', 'categorias_custom').maybeSingle();
     if (error || !data) return [];
     return Array.isArray(data.value) ? data.value : [];
   },
@@ -1036,13 +1198,13 @@ const DB = {
       { key: 'categorias_custom', value: arr },
       { onConflict: 'key' }
     );
-    if (error) throw new Error(error.message);
+    exigirOk('saveCategorias', error);
   },
 
   // ---- MOTIVOS PADRÃO OCULTADOS ----
   getMotivosOcultos: async () => {
     const { data, error } = await supabase
-      .from('configuracoes').select('*').eq('key', 'motivos_ocultos').single();
+      .from('configuracoes').select('*').eq('key', 'motivos_ocultos').maybeSingle();
     if (error || !data) return [];
     return Array.isArray(data.value) ? data.value : [];
   },
@@ -1051,14 +1213,14 @@ const DB = {
       { key: 'motivos_ocultos', value: arr },
       { onConflict: 'key' }
     );
-    if (error) throw new Error(error.message);
+    exigirOk('saveMotivosOcultos', error);
   },
 
   // Paradas de produção
   getParadas: async () => {
     const { data, error } = await supabase
       .from('paradas').select('*').order('date', { ascending: false });
-    if (error) { console.error('getParadas:', error); return []; }
+    if (erroDB('getParadas', error)) return [];
     // areas pode voltar como array (jsonb) ou string JSON (coluna text)
     return (data || []).map(r => {
       let areas = r.areas || [];
@@ -1069,21 +1231,23 @@ const DB = {
     });
   },
   saveParada: async (rec) => {
-    const { error } = await supabase.from('paradas').upsert({
-      id:      rec.id,
-      date:    rec.date,
-      motivo:  rec.motivo,
-      inicio:  rec.inicio || null,
-      fim:     rec.fim || null,
-      duracao: rec.duracao || 0,
-      obs:     rec.obs || '',
-      areas:   rec.areas || [],
-    }, { onConflict: 'id' });
-    if (error) throw new Error(error.message);
+    const { error } = await comRetentativa('saveParada', () =>
+      supabase.from('paradas').upsert({
+        id:      Number(rec.id) || Date.now(),
+        date:    rec.date,
+        motivo:  rec.motivo,
+        inicio:  rec.inicio || null,
+        fim:     rec.fim || null,
+        duracao: rec.duracao || 0,
+        obs:     rec.obs || '',
+        areas:   rec.areas || [],
+      }, { onConflict: 'id' }));
+    exigirOk('saveParada', error);
   },
   deleteParada: async (id) => {
-    const { error } = await supabase.from('paradas').delete().eq('id', id);
-    if (error) throw new Error(error.message);
+    const { error } = await comRetentativa('deleteParada', () =>
+      supabase.from('paradas').delete().eq('id', id));
+    exigirOk('deleteParada', error);
   },
 };
 
@@ -2809,6 +2973,10 @@ async function init() {
   document.body.appendChild(overlay);
 
   try {
+    // Se a chave não for aceita, o banner aparece agora — e não só quando
+    // o usuário tentar salvar a primeira parada.
+    await testarConexaoDB();
+
     let motivosRaw;
     [capacityRecords, productionRecords, dashJustif, metasData, configData, paradasRecords,
      motivosRaw, categoriasCustom, motivosOcultos] = await Promise.all([
