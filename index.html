@@ -1267,7 +1267,6 @@ const INBOUND_AREAS = [
   { id: 'dobra', name: 'Dobra', icon: '📦', pdia: 582 },
   { id: 'check_in', name: 'Check In', icon: '☑️', pdia: 2910 },
   { id: 'armazenagem', name: 'Armazenagem', icon: '🏷️', pdia: 1261 },
-  { id: 'reprovada', name: 'Reprovada', icon: '❌', pdia: 3000 },
 ];
 const OUTBOUND_AREAS = [
   { id: 'picking',    name: 'Picking',    icon: '🎾', pdia: 485 },
@@ -1280,7 +1279,10 @@ const RED_CARPET_AREAS = [
   { id: 'fotografia_red', name: 'Fotografia Red',  icon: '📸', pdia: 291 },
   { id: 'expedicao_red',  name: 'Expedição Red',   icon: '🚚', pdia: 400 },
 ];
-const ALL_CAP_AREAS = [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS];
+const RECUSADAS_AREAS = [
+  { id: 'reprovada', name: 'Reprovada', icon: '❌', pdia: 3000 },
+];
+const ALL_CAP_AREAS = [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS, ...RECUSADAS_AREAS];
 
 // Mesma sequência da Capacidade: Inbound → Outbound → Red Carpet
 const PRODUCAO_AREAS = [
@@ -1293,7 +1295,6 @@ const PRODUCAO_AREAS = [
   { id: 'p_dobra', name: 'DOBRA', icon: '📦', group: 'INBOUND' },
   { id: 'p_check_in', name: 'CHECK IN', icon: '☑️', group: 'INBOUND' },
   { id: 'p_armazenagem', name: 'ARMAZENAGEM', icon: '🏷️', group: 'INBOUND' },
-  { id: 'p_reprovada', name: 'REPROVADA', icon: '❌', group: 'INBOUND' },
   // OUTBOUND
   { id: 'p_picking',    name: 'PICKING',    icon: '🎾', group: 'OUTBOUND' },
   { id: 'p_conferencia', name: 'CONFERÊNCIA', icon: '📑', group: 'OUTBOUND' },
@@ -1303,6 +1304,8 @@ const PRODUCAO_AREAS = [
   { id: 'p_cadastro_red',   name: 'CADASTRO RED',   icon: '📋', group: 'RED CARPET' },
   { id: 'p_fotografia_red', name: 'FOTOGRAFIA RED',  icon: '📸', group: 'RED CARPET' },
   { id: 'p_expedicao_red',  name: 'EXPEDIÇÃO RED',   icon: '🚚', group: 'RED CARPET' },
+  // RECUSADAS
+  { id: 'p_reprovada', name: 'REPROVADA', icon: '❌', group: 'RECUSADAS' },
 ];
 
 // ================================================================
@@ -1534,11 +1537,13 @@ function openModal() {
     ${renderGroup('INBOUND', INBOUND_AREAS, 'var(--cyan)')}
     ${renderGroup('OUTBOUND', OUTBOUND_AREAS, 'var(--purple)')}
     ${renderGroup('RED CARPET', RED_CARPET_AREAS, 'var(--yellow)')}
+    ${renderGroup('RECUSADAS', RECUSADAS_AREAS, 'var(--red)')}
     <div class="totals-bar">
       <div class="total-item"><span class="total-label">Colaboradores</span><span class="total-value" id="modal-total-colab">0</span></div>
       <div class="total-item"><span class="total-label" style="color:var(--cyan)">Inbound</span><span class="total-value color-cyan" id="modal-total-inbound">0</span></div>
       <div class="total-item"><span class="total-label" style="color:var(--purple)">Outbound</span><span class="total-value color-purple" id="modal-total-outbound">0</span></div>
       <div class="total-item"><span class="total-label" style="color:var(--yellow)">Red Carpet</span><span class="total-value color-yellow" id="modal-total-red">0</span></div>
+      <div class="total-item"><span class="total-label" style="color:var(--red)">Recusadas</span><span class="total-value" style="color:var(--red)" id="modal-total-recusadas">0</span></div>
       <div class="total-item"><span class="total-label">Total Geral</span><span class="total-value big color-green" id="modal-total-geral">0</span></div>
     </div>
     <div class="modal-actions">
@@ -1570,8 +1575,8 @@ function recalcModal() {
     if (el) el.textContent = fmt(val);
   };
 
-  const groups = { 'INBOUND': INBOUND_AREAS, 'OUTBOUND': OUTBOUND_AREAS, 'RED CARPET': RED_CARPET_AREAS };
-  let totalColab = 0, totalInbound = 0, totalOutbound = 0, totalRed = 0;
+  const groups = { 'INBOUND': INBOUND_AREAS, 'OUTBOUND': OUTBOUND_AREAS, 'RED CARPET': RED_CARPET_AREAS, 'RECUSADAS': RECUSADAS_AREAS };
+  let totalColab = 0, totalInbound = 0, totalOutbound = 0, totalRed = 0, totalRecusadas = 0;
 
   Object.entries(groups).forEach(([groupName, areas]) => {
     let gFixos = 0, gTrein = 0, gCapFixos = 0, gCapTrein = 0, gCapTotal = 0;
@@ -1601,13 +1606,16 @@ function recalcModal() {
     if (groupName === 'INBOUND') totalInbound = gCapTotal;
     if (groupName === 'OUTBOUND') totalOutbound = gCapTotal;
     if (groupName === 'RED CARPET') totalRed = gCapTotal;
+    if (groupName === 'RECUSADAS') totalRecusadas = gCapTotal;
   });
 
   document.getElementById('modal-total-colab').textContent = fmt(totalColab);
   document.getElementById('modal-total-inbound').textContent = fmt(totalInbound);
   document.getElementById('modal-total-outbound').textContent = fmt(totalOutbound);
   document.getElementById('modal-total-red').textContent = fmt(totalRed);
-  document.getElementById('modal-total-geral').textContent = fmt(totalInbound + totalOutbound + totalRed);
+  const elRec = document.getElementById('modal-total-recusadas');
+  if (elRec) elRec.textContent = fmt(totalRecusadas);
+  document.getElementById('modal-total-geral').textContent = fmt(totalInbound + totalOutbound + totalRed + totalRecusadas);
 }
 
 async function saveCapacidade() {
@@ -1641,14 +1649,15 @@ async function saveCapacidade() {
   const inbound = calcGroup(INBOUND_AREAS);
   const outbound = calcGroup(OUTBOUND_AREAS);
   const redCarpet = calcGroup(RED_CARPET_AREAS);
+  const recusadas = calcGroup(RECUSADAS_AREAS);
   const colab = ALL_CAP_AREAS.reduce((s, a) => s + areas[a.id].fixos + areas[a.id].treinamento, 0);
 
   const record = {
     id: editingId || Date.now(),
     date: dateBR,
     colaboradores: colab,
-    inbound, outbound, redCarpet,
-    total: inbound + outbound + redCarpet,
+    inbound, outbound, redCarpet, recusadas,
+    total: inbound + outbound + redCarpet + recusadas,
     areas,
   };
 
@@ -1678,8 +1687,8 @@ function renderProducao() {
 
   const existing = productionRecords.find(r => r.date === todayBR());
 
-  const groups = ['INBOUND', 'OUTBOUND', 'RED CARPET'];
-  const groupColors = { 'INBOUND': 'var(--cyan)', 'OUTBOUND': 'var(--purple)', 'RED CARPET': 'var(--yellow)' };
+  const groups = ['INBOUND', 'OUTBOUND', 'RED CARPET', 'RECUSADAS'];
+  const groupColors = { 'INBOUND': 'var(--cyan)', 'OUTBOUND': 'var(--purple)', 'RED CARPET': 'var(--yellow)', 'RECUSADAS': 'var(--red)' };
   let html = '';
   groups.forEach(g => {
     const items = PRODUCAO_AREAS.filter(a => a.group === g);
@@ -1786,6 +1795,7 @@ const DASH_GROUPS = [
   { name: 'INBOUND',     color: 'var(--cyan)',   areas: INBOUND_AREAS },
   { name: 'OUTBOUND',    color: 'var(--purple)', areas: OUTBOUND_AREAS },
   { name: 'RED CARPET',  color: 'var(--yellow)', areas: RED_CARPET_AREAS },
+  { name: 'RECUSADAS',   color: 'var(--red)',    areas: RECUSADAS_AREAS },
 ];
 
 let dashJustif = {}; // { "15/05/2026_criacao_lotes": "motivo..." }
@@ -2115,6 +2125,7 @@ function renderMetasTable() {
     { name: 'INBOUND',    color: 'var(--cyan)',   areas: INBOUND_AREAS },
     { name: 'OUTBOUND',   color: 'var(--purple)', areas: OUTBOUND_AREAS },
     { name: 'RED CARPET', color: 'var(--yellow)', areas: RED_CARPET_AREAS },
+    { name: 'RECUSADAS',  color: 'var(--red)',    areas: RECUSADAS_AREAS },
   ];
 
   GROUPS.forEach(g => {
@@ -2223,7 +2234,7 @@ async function saveMetas() {
   const dias = parseInt(document.getElementById('meta-dias-uteis')?.value) || 20;
   const areas = {};
 
-  [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS].forEach(a => {
+  ALL_CAP_AREAS.forEach(a => {
     const metaEl = document.querySelector(`.meta-input[data-area="${a.id}"][data-field="meta"]`);
     const hcEl   = document.querySelector(`.meta-input[data-area="${a.id}"][data-field="hc"]`);
     areas[a.id] = {
@@ -2252,7 +2263,7 @@ function exportMetasCSV() {
   const dias = parseInt(document.getElementById('meta-dias-uteis')?.value) || 20;
   let csv = `Mês,${MESES[mes]} ${ano}\nDias úteis,${dias}\n\nÁrea,Meta Mensal,HC Planejado,Meta/Dia\n`;
 
-  [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS].forEach(a => {
+  ALL_CAP_AREAS.forEach(a => {
     const saved   = metasData[key]?.areas?.[a.id] || {};
     const meta    = saved.meta || 0;
     const hc      = saved.hc   || 0;
@@ -2293,6 +2304,7 @@ function gerarImagem() {
     { name: 'INBOUND',    color: '#0099cc', areas: INBOUND_AREAS },
     { name: 'OUTBOUND',   color: '#6e40c9', areas: OUTBOUND_AREAS },
     { name: 'RED CARPET', color: '#c47f00', areas: RED_CARPET_AREAS },
+    { name: 'RECUSADAS',  color: '#e5484d', areas: RECUSADAS_AREAS },
   ];
 
   const groups = []; // { name, color, areas: [...] }
@@ -2625,6 +2637,7 @@ function gerarImagemMetas() {
     { name: 'INBOUND',    color: '#0099cc', areas: INBOUND_AREAS },
     { name: 'OUTBOUND',   color: '#6e40c9', areas: OUTBOUND_AREAS },
     { name: 'RED CARPET', color: '#c47f00', areas: RED_CARPET_AREAS },
+    { name: 'RECUSADAS',  color: '#e5484d', areas: RECUSADAS_AREAS },
   ];
 
   const groups = [];
@@ -2858,6 +2871,7 @@ const CONFIG_GROUPS = [
   { name: 'INBOUND',     color: 'var(--cyan)',   areas: INBOUND_AREAS },
   { name: 'OUTBOUND',    color: 'var(--purple)', areas: OUTBOUND_AREAS },
   { name: 'RED CARPET',  color: 'var(--yellow)', areas: RED_CARPET_AREAS },
+  { name: 'RECUSADAS',   color: 'var(--red)',    areas: RECUSADAS_AREAS },
 ];
 
 async function renderConfig() {
@@ -2933,7 +2947,7 @@ function updateConfigPreview(areaId) {
 }
 
 async function saveConfig() {
-  const allAreas = [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS];
+  const allAreas = ALL_CAP_AREAS;
   allAreas.forEach(a => {
     const val = parseInt(document.getElementById(`cfg-${a.id}`)?.value);
     if (val > 0) configData[a.id] = val;
@@ -3110,6 +3124,7 @@ const ALL_AREAS_PARADA = [
   ...INBOUND_AREAS.map(a => ({ id: a.id, name: a.name })),
   ...OUTBOUND_AREAS.map(a => ({ id: a.id, name: a.name })),
   ...RED_CARPET_AREAS.map(a => ({ id: a.id, name: a.name })),
+  ...RECUSADAS_AREAS.map(a => ({ id: a.id, name: a.name })),
 ];
 
 // Jornada: 07:00 → 16:48 = 588 minutos
@@ -3164,12 +3179,14 @@ function calcDuracao(inicio, fim) {
   return dia1 + dia2;
 }
 
-// Áreas efetivamente atingidas pela parada ('todas' expande para o conjunto completo)
+// Áreas efetivamente atingidas pela parada ('todas' expande para o conjunto completo).
+// Recusadas fica fora do 'todas' — é área de descarte, não sofre parada de produção —
+// mas continua contando se o usuário marcar o setor explicitamente.
 function getAreasDaParada(rec) {
-  const all = [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS];
   const ids = rec.areas || [];
-  if (ids.includes('todas')) return all;
-  return all.filter(a => ids.includes(a.id));
+  const operacionais = [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS];
+  if (ids.includes('todas')) return operacionais;
+  return ALL_CAP_AREAS.filter(a => ids.includes(a.id));
 }
 
 // Jornada 07:00–16:48 = 588 min = 9,8 h
@@ -3339,7 +3356,7 @@ function renderParadas() {
     }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted)">Sem dados</div>';
 
   // ---- RANKING PEÇAS PERDIDAS POR SETOR ----
-  const allAreas = [...INBOUND_AREAS, ...OUTBOUND_AREAS, ...RED_CARPET_AREAS];
+  const allAreas = ALL_CAP_AREAS;
   const pecasPorSetor = {};
 
   allAreas.forEach(a => { pecasPorSetor[a.id] = 0; });
@@ -4209,6 +4226,7 @@ const GRUPOS_ARVORE = [
   { key: 'INBOUND',     name: 'Inbound',     areas: INBOUND_AREAS,     cor: 'var(--cyan)'   },
   { key: 'OUTBOUND',    name: 'Outbound',    areas: OUTBOUND_AREAS,    cor: 'var(--purple)' },
   { key: 'RED_CARPET',  name: 'Red Carpet',  areas: RED_CARPET_AREAS,  cor: 'var(--yellow)' },
+  { key: 'RECUSADAS',   name: 'Recusadas',   areas: RECUSADAS_AREAS,   cor: 'var(--red)'    },
 ];
 
 // Descobre a categoria de um motivo. Motivos personalizados e texto
